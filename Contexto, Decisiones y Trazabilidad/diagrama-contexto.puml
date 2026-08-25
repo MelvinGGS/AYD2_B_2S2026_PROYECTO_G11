@@ -1,0 +1,36 @@
+@startuml diagrama-contexto
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Diagrama de Contexto - SGO-Logic
+
+Person(cliente, "Cliente", "Inicia, continúa y completa compra desde web, app, tienda o llamada")
+Person(empleado, "Empleado de Tienda", "Gestiona compras en tienda física")
+Person(agente_cc, "Agente de Call Center", "Atiende consultas e incidencias telefónicas")
+Person(personal_log, "Personal de Logística", "Revisa pedidos para preparación y despacho")
+Person(dir_finanzas, "Directora de Finanzas", "Recupera evidencia de transacciones para auditoría SAT")
+
+System(sgologic, "SGO-Logic", "Sistema de Gestión de Órdenes y Logística Omnicanal")
+
+System_Ext(erp, "ERP-Core (AS/400)", "Plataforma contable-financiera (legado)")
+System_Ext(pos, "Sistemas POS (32 inst.)", "Puntos de venta de las 32 tiendas")
+System_Ext(payklik, "PayKlik", "Pasarela de pagos externa")
+System_Ext(logiexpress, "LogiExpress", "Proveedor de logística y entregas")
+System_Ext(sat, "SAT", "Superintendencia de Administración Tributaria")
+System_Ext(notificaciones, "Proveedor de Notificaciones", "Servicio externo de SMS, correo y push")
+System_Ext(catalogo, "Catálogo Comercial", "Sistema externo de productos, precios y combos")
+
+Rel(cliente, sgologic, "Navega, compra y consulta estado", "HTTPS / UI")
+Rel(empleado, sgologic, "Asiste en venta cruzando canales", "HTTPS / UI")
+Rel(agente_cc, sgologic, "Consulta historial consolidado", "HTTPS / UI")
+Rel(personal_log, sgologic, "Obtiene ubicaciones de despacho", "HTTPS / UI")
+Rel(dir_finanzas, sgologic, "Reconstruye operaciones y audita", "HTTPS / UI")
+
+Rel_R(sgologic, erp, "Envía resumen de ventas", "Batch CSV/XML (cada 30 min)")
+Rel_U(pos, sgologic, "Reporta ventas e inventario local", "Batch CSV (cada 5 min)")
+Rel_D(sgologic, payklik, "Procesa cobros (tarjeta)", "REST / HTTPS (~800ms)")
+Rel_D(sgologic, logiexpress, "Genera guías de entrega", "REST / HTTPS (~2% timeout)")
+Rel_D(sgologic, sat, "Emite facturas y notas de crédito", "XML / HTTPS (tiempos variables)")
+Rel_L(sgologic, notificaciones, "Solicita envío de alertas", "REST / HTTPS (fire-and-forget)")
+Rel_U(sgologic, catalogo, "Consulta información de productos", "REST / HTTPS")
+
+@enduml
