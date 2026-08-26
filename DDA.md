@@ -212,6 +212,29 @@ SGO-Logic no funciona solo. Se conecta con otros sistemas:
 
 
 ## Listado de Stakeholders y preocupaciones arquitectónicas
+
+Un stakeholder es cualquier persona, grupo u organización con interés en el sistema, ya sea porque lo usa, lo financia, lo regula o se ve afectado por él. Sus preocupaciones determinan directamente los drivers arquitectónicos del sistema.
+
+| ID | Stakeholder | Cargo / Rol | Preocupación Principal | Impacto en la Arquitectura |
+|----|-------------|-------------|----------------------|---------------------------|
+| SH-01 | **Dirección / Gerencia General** | Gobernanza estratégica | No modificar ERP-Core ni POS. ROI del proyecto. | Restricción absoluta: todos los sistemas legacy se integran mediante adaptadores (ACL) sin tocarlos. Presupuesto CAPEX $150k, OPEX ≤ $1,200/mes. |
+| SH-02 | **Carlos Méndez** | Gerente de TI | Continuidad en Black Friday (8× demanda). Que el equipo interno pueda mantener la solución. Monitoreo constante de sistemas externos. *"Si el sistema explota en el próximo Black Friday, mi puesto está en riesgo."* | Stack Java/.NET ya conocido. Docker Compose en vez de Kubernetes. Prometheus + Grafana para observabilidad. |
+| SH-03 | **Ana Lucía Fuentes** | Directora de Finanzas **(poder de veto)** | Trazabilidad total: reconstruir quién, cuándo y qué cambió. Recuperar evidencia de cualquier transacción en < 1 segundo. Cumplimiento fiscal SAT. Conciliación confiable con el ERP. | Event Sourcing en Órdenes y Facturación. ELK Stack para búsqueda < 1 s. Adaptador batch CSV/XML al ERP cada 30 min. |
+| SH-04 | **Roberto Quezada** | Jefe de Logística | Reducir errores de despacho en 70% (cada envío incorrecto cuesta $25 en logística inversa). Visibilidad oportuna de qué preparar, desde dónde y a quién entregar. | Servicio de Inventario unificado (2 CDs + 32 tiendas). Servicio de Logística con fulfillment flexible. Sincronización de stock desde POS cada 5 min. |
+| SH-05 | **Directora de Comercialización** | Dir. Comercial | Experiencia consistente en todos los canales. Carrito unificado. *"No podemos tener silos."* | API Gateway (Kong) como punto de entrada único. Carrito en Redis asociado al ID del cliente, no al canal. |
+| SH-06 | **Jefe de Operaciones** | Operaciones | Evitar repetir los $150,000 perdidos por caída de PayKlik (45 min, Black Friday anterior). Procesar pagos aunque el proveedor falle. | Circuit Breaker en Servicio de Pagos + cola de pagos en RabbitMQ. Cada intento queda auditado. |
+| SH-07 | **Cliente Final** | Usuario | Consultar estado de orden desde cualquier dispositivo en < 5 s. Notificaciones de estado. Experiencia omnicanal sin interrupciones. Múltiples métodos de pago. | CQRS para consultas rápidas. Notificaciones fire-and-forget. Módulo de Identidad/Cliente. |
+| SH-08 | **Empleado de Tienda / POS** | Usuario operativo | Registrar ventas presenciales sin interrumpir la operativa actual. | El POS no se modifica. SGO-Logic lee archivos de stock del POS cada 5 min mediante adaptador batch. |
+| SH-09 | **Agente de Call Center** | Usuario operativo | Consultar historial completo de compras, devoluciones e incidencias del cliente para dar atención oportuna (actualmente devoluciones tardan hasta 7 días hábiles). | Módulo de Identidad/Cliente con historial consolidado en Servicio de Órdenes. |
+| SH-10 | **SAT** | Regulador externo | Facturas electrónicas en XML con CUI y serie autorizada. Capacidad de reconstruir transacciones en auditorías anuales. | Servicio de Facturación asíncrono con cola + retry. Event Sourcing para auditoría inmutable. |
+
+### Intereses Contrapuestos
+
+| Tensión | Stakeholder A | Stakeholder B | Resolución |
+|---------|--------------|--------------|------------|
+| Velocidad vs. Trazabilidad | SH-06 (confirmar ventas rápido) | SH-03 (registrar todo antes de confirmar) | Facturación asíncrona: la orden se confirma al pagar, la factura se emite en background vía cola. |
+| Flexibilidad vs. Estabilidad | SH-05 (nuevas funcionalidades omnicanal) | SH-02 (no tocar sistemas que funcionan) | Adaptadores (ACL) que integran lo nuevo con lo legacy sin modificar nada. |
+| Disponibilidad vs. Consistencia | SH-07 (siempre funcionar) | SH-03 (datos exactos) | Cola de pagos con reintentos: el cliente no pierde la orden; Finanzas obtiene el registro completo cuando PayKlik vuelve. |
 ## Características del sistema priorizadas
 ## Drivers Requisitos Funcionales
 
@@ -988,4 +1011,24 @@ A continuación se presentan los Escenarios de Atributos de Calidad estructurado
 
 
 ## Drivers de Restricción
+
+Los drivers de restricción son condiciones que el equipo de arquitectura no puede cambiar. Delimitan el espacio de soluciones posibles y deben ser respetados por todas las decisiones de diseño.
+
+| ID | Restricción | Tipo | Implicación en el Diseño |
+|----|-------------|------|-------------------------|
+| RC-01 | El **ERP-Core (AS/400)** no será reemplazado ni modificado. Su único mecanismo de integración disponible es la recepción de archivos CSV/XML cada 30 minutos. | Técnica / Organizacional | Adaptador batch (Anti-Corruption Layer) en el Servicio de Facturación. Genera archivos CSV/XML cada 30 min y los deposita vía SFTP. Cero cambios al AS/400. |
+| RC-02 | Las **32 instancias del sistema POS** no forman parte de un programa de reemplazo. | Técnica / Organizacional | El POS exporta archivos de inventario local. SGO-Logic los consume mediante un job de lectura batch cada 5 minutos. No se modifica el POS. |
+| RC-03 | Contrato con **PayKlik** (pasarela de pagos) vigente por **3 años**. Interfaz REST, latencia nominal ~800 ms, picos hasta 5 s. | Contractual | Integración obligatoria con PayKlik. Adaptador resiliente con Circuit Breaker (Resilience4j) y cola de pagos en RabbitMQ para tolerar sus caídas. |
+| RC-04 | Contrato con **LogiExpress** (proveedor logístico) vigente por **2 años**. ~2% de solicitudes terminan en timeout. | Contractual | Integración obligatoria con LogiExpress. Adaptador con retry y backoff exponencial + Dead Letter Queue para gestionar los timeouts. |
+| RC-05 | **Presupuesto fijo**: CAPEX $150,000 total. OPEX ≤ $1,200 mensuales. | Financiera | Stack 100% open-source. CAPEX estimado: ~$23k–$37k. OPEX estimado: ~$270–$450/mes. El resto del CAPEX queda disponible para Fase 2. |
+| RC-06 | **Cumplimiento SAT**: Emisión de facturas electrónicas XML con CUI y serie autorizada. | Regulatoria | Servicio de Facturación con cola asíncrona + retry ante la SAT. Event Sourcing para mantener registro inmutable. |
+| RC-07 | **PCI-DSS**: No almacenar números completos de tarjeta (PAN) ni CVV. | Regulatoria / Seguridad | El Servicio de Pagos almacena únicamente tokens de referencia de PayKlik. Los datos sensibles de tarjeta residen exclusivamente en PayKlik. |
+| RC-08 | **Protección de datos personales** conforme a normativa de Guatemala, El Salvador y Costa Rica. | Regulatoria / Legal | Cifrado en tránsito (TLS 1.2+), cifrado en reposo (AES-256). Minimización de datos. Retención: datos transaccionales 5 años (SAT), datos personales purgables a solicitud. |
+| RC-09 | **Despliegue inicial on-premises**. La arquitectura debe permitir migración planificada a la nube. | Técnica / Financiera | Servicios empaquetados como imágenes Docker. Docker Compose en servidores on-prem. Migración futura: mismas imágenes → Cloud Run / ECS. RTO ≤ 2h, RPO ≤ 5 min. |
+| RC-10 | **Stack tecnológico del equipo**: El equipo domina Java y .NET con conocimientos básicos de Docker. | Técnica / Organizacional | Servicios core en Java 17 + Spring Boot 3. Servicios secundarios en .NET 8. Docker Compose en vez de Kubernetes. Sin tecnologías exóticas. |
+| RC-11 | **Minimización del consumo energético** de la infraestructura. | Ambiental / Operacional | Contenedores Docker (más eficientes que VMs). Escalado bajo demanda: réplicas adicionales solo durante picos (Black Friday), se reducen después. Consolidación en 2–3 servidores. |
+| RC-12 | **Black Friday inamovible** (noviembre). Primer mes debe proteger pagos y facturación. | Temporal | Semanas 1–2: Pagos resilientes (CB + cola). Semanas 3–4: Facturación asíncrona. Mes 2: Inventario + Órdenes. Mes 3: Logística + Notificaciones + Monitoreo completo. |
+
 ## Matrices de Trazabilidad
+
+> Las matrices de trazabilidad completas se encuentran en [`Contexto, Decisiones y Trazabilidad/matrices-trazabilidad.md`](<Contexto, Decisiones y Trazabilidad/matrices-trazabilidad.md>)
