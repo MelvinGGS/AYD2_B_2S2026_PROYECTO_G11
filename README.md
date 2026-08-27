@@ -1,47 +1,53 @@
-# SGO-Logic — Sistema de Gestión de Órdenes y Logística Omnicanal
+# Proyecto Fase 1 — Grupo 11
 
-> **Universidad San Carlos de Guatemala — Facultad de Ingeniería**
-> Análisis y Diseño 2 · Sección B · 2S 2026 · Grupo 11
+## Integrantes
 
----
-
-## Descripción del Proyecto
-
-**SGO-Logic** es la propuesta arquitectónica para llevar a MegaStore (cadena regional de retail con presencia en Guatemala, El Salvador y Costa Rica) hacia una operación omnicanal. Este repositorio contiene los entregables de la **Fase 1**: definición y documentación de la arquitectura de software.
-
----
-
-## Entregables
-
-### Entregable 1 — Documento de Definición de Arquitectura (DDA)
-
-El DDA completo se encuentra en [`DDA.md`](DDA.md). Contiene:
-
-| Sección | Contenido |
-|---------|-----------|
-| [Identificación del caso de negocio](DDA.md#identificación-del-caso-de-negocio) | CUN de alto nivel y primera descomposición |
-| [Listado de Stakeholders](DDA.md#listado-de-stakeholders-y-preocupaciones-arquitectónicas) | Stakeholders, roles y preocupaciones |
-| [Características priorizadas](DDA.md#características-del-sistema-priorizadas) | Priorización MoSCoW |
-| [Drivers Funcionales (CDU)](DDA.md#drivers-requisitos-funcionales) | Diagramas de casos de uso expandidos |
-| [Drivers de Calidad (EAC)](DDA.md#drivers-de-calidad-escenarios-de-atributos-de-calidad---eac) | Escenarios de atributos de calidad |
-| [Drivers de Restricción](DDA.md#drivers-de-restricción) | Restricciones del sistema |
-| [Matrices de Trazabilidad](DDA.md#matrices-de-trazabilidad) | Trazabilidad Stakeholder → Driver → ADR → Vista |
-
-**Archivos de apoyo (contenido detallado por sección):**
-- [`Bases DDA/stakeholders-preocupaciones.md`](Bases%20DDA/stakeholders-preocupaciones.md) — Stakeholders con mapa de intereses contrapuestos
-- [`Bases DDA/drivers-restriccion.md`](Bases%20DDA/drivers-restriccion.md) — 12 restricciones con mapa por área
-- [`Bases DDA/flujo-principal.md`](Bases%20DDA/flujo-principal.md) — Flujo omnicanal completo paso a paso
-- [`CDU_NYS/`](CDU_NYS/) — Imágenes de diagramas CUN y CDU
-- [`Contexto, Decisiones y Trazabilidad/`](<Contexto, Decisiones y Trazabilidad/>) — Matrices, ADRs, características priorizadas
+| Carné | Nombre |
+|---|---|
+| 202300712 | Melvin Geovanni García Sumalá |
+| 202300378 | Maria Fernanda Morales Lima |
+| 202000576 | Susana Paola González Contreras |
+| 202307272 | Bryan Alejandro Anona Paredes |
+| 202112109 | Carlos David de Leon Barrios |
 
 ---
 
+## Índice de Entregables
 
+### Documento de Definición de Arquitectura (DDA)
 
-**Justificación de Decisiones Arquitectónicas (ADRs):**
-[`Contexto, Decisiones y Trazabilidad/justificacion-decisiones-arquitectonicas.md`](<Contexto, Decisiones y Trazabilidad/justificacion-decisiones-arquitectonicas.md>)
+Documento Principal Consolidado: [Documento de Definición de Arquitectura (DDA)](DDA.md)
 
-
+Secciones del DDA:
+1. [Identificación del caso de negocio](CDU_NYS/identificacion-caso-negocio.md)
+2. [Listado de Stakeholders y preocupaciones arquitectónicas](Bases%20DDA/stakeholders-preocupaciones.md)
+3. [Características del sistema priorizadas](Contexto,%20Decisiones%20y%20Trazabilidad/caracteristicas-priorizadas.md)
+4. [Drivers Requisitos Funcionales](CDU_NYS/drivers-requisitos-funcionales.md)
+5. [Drivers de Calidad (Escenarios Atributos de Calidad - EAC)](Bases%20DDA/drivers-calidad.md)
+6. [Drivers de Restricción](Bases%20DDA/drivers-restriccion.md)
+7. [Matrices de Trazabilidad](Contexto,%20Decisiones%20y%20Trazabilidad/matrices-trazabilidad.md)
 
 ---
 
+### Diagramas Arquitectónicos
+
+1. [Diagrama de Contexto](Contexto,%20Decisiones%20y%20Trazabilidad/Contexto.png)
+2. [Diagrama de Componentes](Diagrama%20de%20arquitecturas/DiagramaDeComponentes.png)
+3. [Diagrama de Despliegue](Diagrama%20de%20arquitecturas/DiagramaDespliegue.jpg)
+4. [Diagrama de Bloques](Diagrama%20de%20arquitecturas/DiagramadeBloques.png)
+5. [Justificación de Decisiones Arquitectónicas (ADRs)](Contexto,%20Decisiones%20y%20Trazabilidad/justificacion-decisiones-arquitectonicas.md)
+
+---
+
+### Prototipo Arquitectónico
+
+1. [Mockups o prototipo de alto nivel](mockups.md)
+2. [Flujo principal del sistema](Bases%20DDA/flujo-principal.md)
+
+---
+
+## Tablero Kanban
+
+Tablero Trello del Proyecto: [https://trello.com/b/skO2sFFI/ayd222](https://trello.com/b/skO2sFFI/ayd222)
+
+![Tablero Kanban](Bases%20DDA/TableroKanban.png)
