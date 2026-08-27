@@ -8,7 +8,7 @@ Este documento describe el flujo principal de operación de SGO-Logic: una compr
 
 El siguiente diagrama muestra la interacción entre todos los servicios de SGO-Logic durante una compra omnicanal. Las flechas sólidas representan mensajes síncronos (REST); las flechas punteadas representan mensajes asíncronos (eventos en RabbitMQ) o respuestas.
 
-> Diagrama de secuencia 
+![Diagrama de Secuencia — Flujo Principal](FlujoCompleto.jpg) 
 
 ---
 
