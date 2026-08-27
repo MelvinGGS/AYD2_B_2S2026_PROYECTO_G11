@@ -1,9 +1,8 @@
 # Documento de Definición de Arquitectura (DDA)
 
+# Identificación del caso de negocio
 
-## Identificación del caso de negocio (Diagrama de Casos de Uso de negocio de alto nivel y primera descomposición).
-
-### 1.1 ¿Quién es MegaStore y Por Qué Necesita Este Sistema?
+## 1.1 ¿Quién es MegaStore y Por Qué Necesita Este Sistema?
 
 MegaStore es una cadena de tiendas que vende productos en tres países: Guatemala, El Salvador y Costa Rica. Tiene **32 tiendas físicas** distribuidas en esas ubicaciones y vende aproximadamente **USD $450 millones al año**.
 
@@ -193,7 +192,7 @@ Esta descomposición garantiza que:
 **Se puede probar**: Cada caso de uso puede ser probado para verificar que funciona correctamente
  
 **Facilita mantenimiento**: Si algo falla, sabes exactamente en qué caso de uso buscar el problema
- 
+
 ---
 
 ## 6. Los Sistemas Externos Que Se Conectan
@@ -208,35 +207,108 @@ SGO-Logic no funciona solo. Se conecta con otros sistemas:
 | **ERP-Core (AS/400)** | Sincronizar datos contables | Archivos CSV cada 30 minutos |
 | **Sistemas POS (32 tiendas)** | Sincronizar inventario | Archivos CSV cada hora |
 
+
 ---
 
-
-## Listado de Stakeholders y preocupaciones arquitectónicas
+# Listado de Stakeholders y Preocupaciones Arquitectónicas
 
 Un stakeholder es cualquier persona, grupo u organización con interés en el sistema, ya sea porque lo usa, lo financia, lo regula o se ve afectado por él. Sus preocupaciones determinan directamente los drivers arquitectónicos del sistema.
 
+---
+
+## Tabla de Stakeholders
+
 | ID | Stakeholder | Cargo / Rol | Preocupación Principal | Impacto en la Arquitectura |
 |----|-------------|-------------|----------------------|---------------------------|
-| SH-01 | **Dirección / Gerencia General** | Gobernanza estratégica | No modificar ERP-Core ni POS. ROI del proyecto. | Restricción absoluta: todos los sistemas legacy se integran mediante adaptadores (ACL) sin tocarlos. Presupuesto CAPEX $150k, OPEX ≤ $1,200/mes. |
-| SH-02 | **Carlos Méndez** | Gerente de TI | Continuidad en Black Friday (8× demanda). Que el equipo interno pueda mantener la solución. Monitoreo constante de sistemas externos. *"Si el sistema explota en el próximo Black Friday, mi puesto está en riesgo."* | Stack Java/.NET ya conocido. Docker Compose en vez de Kubernetes. Prometheus + Grafana para observabilidad. |
-| SH-03 | **Ana Lucía Fuentes** | Directora de Finanzas **(poder de veto)** | Trazabilidad total: reconstruir quién, cuándo y qué cambió. Recuperar evidencia de cualquier transacción en < 1 segundo. Cumplimiento fiscal SAT. Conciliación confiable con el ERP. | Event Sourcing en Órdenes y Facturación. ELK Stack para búsqueda < 1 s. Adaptador batch CSV/XML al ERP cada 30 min. |
-| SH-04 | **Roberto Quezada** | Jefe de Logística | Reducir errores de despacho en 70% (cada envío incorrecto cuesta $25 en logística inversa). Visibilidad oportuna de qué preparar, desde dónde y a quién entregar. | Servicio de Inventario unificado (2 CDs + 32 tiendas). Servicio de Logística con fulfillment flexible. Sincronización de stock desde POS cada 5 min. |
-| SH-05 | **Directora de Comercialización** | Dir. Comercial | Experiencia consistente en todos los canales. Carrito unificado. *"No podemos tener silos."* | API Gateway (Kong) como punto de entrada único. Carrito en Redis asociado al ID del cliente, no al canal. |
-| SH-06 | **Jefe de Operaciones** | Operaciones | Evitar repetir los $150,000 perdidos por caída de PayKlik (45 min, Black Friday anterior). Procesar pagos aunque el proveedor falle. | Circuit Breaker en Servicio de Pagos + cola de pagos en RabbitMQ. Cada intento queda auditado. |
-| SH-07 | **Cliente Final** | Usuario | Consultar estado de orden desde cualquier dispositivo en < 5 s. Notificaciones de estado. Experiencia omnicanal sin interrupciones. Múltiples métodos de pago. | CQRS para consultas rápidas. Notificaciones fire-and-forget. Módulo de Identidad/Cliente. |
-| SH-08 | **Empleado de Tienda / POS** | Usuario operativo | Registrar ventas presenciales sin interrumpir la operativa actual. | El POS no se modifica. SGO-Logic lee archivos de stock del POS cada 5 min mediante adaptador batch. |
-| SH-09 | **Agente de Call Center** | Usuario operativo | Consultar historial completo de compras, devoluciones e incidencias del cliente para dar atención oportuna (actualmente devoluciones tardan hasta 7 días hábiles). | Módulo de Identidad/Cliente con historial consolidado en Servicio de Órdenes. |
-| SH-10 | **SAT** | Regulador externo | Facturas electrónicas en XML con CUI y serie autorizada. Capacidad de reconstruir transacciones en auditorías anuales. | Servicio de Facturación asíncrono con cola + retry. Event Sourcing para auditoría inmutable. |
+| SH-01 | **Dirección / Gerencia General** | Gobernanza estratégica y toma de decisiones | No modificar ni reemplazar ERP-Core ni los POS. Maximizar el retorno de la inversión. | Restricción absoluta: todos los sistemas legacy se integran mediante adaptadores sin tocarlos. Presupuesto CAPEX $150k, OPEX <= $1,200/mes. |
+| SH-02 | **Carlos Méndez** | Gerente de Tecnología de la Información | Garantizar la continuidad del negocio en Black Friday (8x demanda). Que el equipo interno pueda operar y mantener la solución. Monitoreo constante de los sistemas externos. "Si el sistema explota en el próximo Black Friday, mi puesto está en riesgo." | Stack tecnológico Java/.NET ya conocido por el equipo. Docker Compose en vez de Kubernetes. Prometheus + Grafana para observabilidad. |
+| SH-03 | **Ana Lucía Fuentes** | Directora de Finanzas (**poder de veto**) | Trazabilidad total: reconstruir quién ejecutó cada operación, cuándo ocurrió y qué cambios se realizaron. Recuperar evidencia de cualquier transacción en menos de 1 segundo. Cumplimiento fiscal con la SAT. Sincronización confiable con el ERP. | Event Sourcing en Órdenes y Facturación. ELK Stack para búsqueda < 1 s. Adaptador batch CSV/XML al ERP cada 30 min. |
+| SH-04 | **Roberto Quezada** | Jefe de Logística | Reducir los errores de despacho en un 70% (actualmente cada envío incorrecto cuesta $25 en logística inversa). Visibilidad oportuna de qué pedidos preparar, desde qué ubicación y a quién entregar. Inventario en tiempo real. | Servicio de Inventario unificado (2 CDs + 32 tiendas). Servicio de Logística con fulfillment flexible. Sincronización de stock desde POS cada 5 min. |
+| SH-05 | **Directora de Comercialización** | Dirección Comercial | Que el cliente pueda comprar desde cualquier canal con la misma experiencia. Carrito unificado. "Nuestro cliente compra desde el celular a las 10 pm, desde la tienda a las 3 pm, o llama a las 8 am. La experiencia debe ser la misma. No podemos tener silos." | API Gateway (Kong) como punto de entrada único. Carrito en Redis asociado al ID del cliente, no al canal ni al dispositivo. |
+| SH-06 | **Jefe de Operaciones** | Operaciones | Evitar repetir la pérdida de $150,000 en ventas durante los 45 minutos de caída de PayKlik en el último Black Friday. Poder procesar pagos sin que una falla del proveedor paralice el negocio. | Circuit Breaker en el Servicio de Pagos + cola de pagos en RabbitMQ. Cada intento de cobro queda auditado. |
+| SH-07 | **Cliente Final** | Usuario del sistema | Consultar el estado de su orden desde cualquier dispositivo en menos de 5 segundos. Recibir notificaciones sobre el estado de su compra. Poder pagar con distintos métodos. Experiencia omnicanal sin interrupciones. | CQRS para consultas rápidas (< 5 s). Notificaciones fire-and-forget. Módulo de Identidad/Cliente para reconocerlo en todos los canales. |
+| SH-08 | **Empleado de Tienda / POS** | Usuario operativo | Registrar ventas presenciales sin interrumpir la operativa actual. Recibir actualizaciones de inventario desde SGO-Logic. | El POS no se modifica. SGO-Logic lee archivos de stock del POS cada 5 min mediante un adaptador batch. |
+| SH-09 | **Agente de Call Center** | Usuario operativo | Consultar el historial completo de compras, devoluciones e incidencias de cualquier cliente para dar atención oportuna (actualmente las devoluciones tardan hasta 7 días hábiles). | Módulo de Identidad/Cliente con historial consolidado en el Servicio de Órdenes. |
+| SH-10 | **SAT (Superintendencia de Administración Tributaria)** | Regulador externo | Recibir facturas electrónicas en XML con CUI y serie autorizada antes de finalizar cada orden. Posibilidad de reconstruir cualquier transacción durante auditorías anuales. | Servicio de Facturación asíncrono con cola + retry. Event Sourcing para auditoría inmutable. |
 
-### Intereses Contrapuestos
+---
 
-| Tensión | Stakeholder A | Stakeholder B | Resolución |
-|---------|--------------|--------------|------------|
-| Velocidad vs. Trazabilidad | SH-06 (confirmar ventas rápido) | SH-03 (registrar todo antes de confirmar) | Facturación asíncrona: la orden se confirma al pagar, la factura se emite en background vía cola. |
-| Flexibilidad vs. Estabilidad | SH-05 (nuevas funcionalidades omnicanal) | SH-02 (no tocar sistemas que funcionan) | Adaptadores (ACL) que integran lo nuevo con lo legacy sin modificar nada. |
-| Disponibilidad vs. Consistencia | SH-07 (siempre funcionar) | SH-03 (datos exactos) | Cola de pagos con reintentos: el cliente no pierde la orden; Finanzas obtiene el registro completo cuando PayKlik vuelve. |
-## Características del sistema priorizadas
-## Drivers Requisitos Funcionales
+## Mapa de Intereses Contrapuestos
+
+Los siguientes pares de stakeholders tienen intereses que pueden generar tensión en las decisiones arquitectónicas:
+
+| Tensión | Stakeholder A | Stakeholder B | Resolución Arquitectónica |
+|---------|--------------|--------------|--------------------------|
+| Velocidad vs. Trazabilidad | SH-06 (quiere confirmar ventas rápido) | SH-03 (quiere registrar todo antes de confirmar) | Facturación asíncrona: la orden se confirma al pagar, la factura se emite en background vía cola. |
+| Flexibilidad vs. Estabilidad | SH-05 (quiere nuevas funcionalidades omnicanal) | SH-02 (no quiere tocar sistemas que funcionan) | Adaptadores (ACL) que integran lo nuevo con lo legacy sin modificar nada. |
+| Disponibilidad vs. Consistencia | SH-07 (quiere que siempre funcione) | SH-03 (quiere datos exactos) | Cola de pagos con reintentos: el cliente no pierde la orden, Finanzas obtiene el registro completo cuando el proveedor vuelve. |
+
+
+---
+
+# Características del Sistema Priorizadas (MoSCoW)
+
+A partir del análisis de los Drivers Funcionales (RF), Escenarios de Calidad (QA) y Restricciones (RC), se han sintetizado las funcionalidades del sistema agrupándolas en características de negocio de alto nivel. La priorización sigue el modelo MoSCoW, evaluando Valor de negocio, Riesgo, Urgencia (Black Friday) e Impacto en la arquitectura.
+
+## MUST HAVE (Críticas para el lanzamiento / Primer mes)
+Estas características son innegociables. Sin ellas, el negocio corre riesgo financiero o legal inmediato, o el sistema simplemente no cumple con su premisa central.
+
+### 1. Compra Omnicanal con Carrito Unificado
+- **Descripción:** Permite a los clientes iniciar, continuar y completar una compra independientemente del canal (Tienda, Web, App Móvil, Call Center), manteniendo un único carrito y perfil de usuario persistente.
+- **Criterio de Priorización:** **Valor / Impacto Arquitectónico.** Constituye el core del negocio para eliminar los silos comerciales actuales.
+- **Drivers Agrupados:** RF-01, RF-02, RF-10, QA-03.
+
+### 2. Resiliencia y Continuidad de Pagos (Protección Black Friday)
+- **Descripción:** Procesamiento de pagos (tarjetas, transferencias) que tolera caídas del proveedor externo (PayKlik). Si la pasarela falla, la orden no se pierde, sino que se encola para procesamiento asíncrono.
+- **Criterio de Priorización:** **Urgencia / Riesgo.** Previene directamente la repetición de los $150,000 en pérdidas sufridos en el evento de demanda pasada.
+- **Drivers Agrupados:** RF-04, QA-02.
+
+### 3. Trazabilidad Estricta y Auditoría Fiscal SAT
+- **Descripción:** Emisión asíncrona de facturación electrónica XML (CUI/Serie) y registro inmutable de cada transacción (quién, cuándo, qué cambió). Posibilidad de consultar evidencia transaccional en menos de 1 segundo.
+- **Criterio de Priorización:** **Riesgo Legal / Restricción.** Obligatorio por normativa fiscal (SAT) y exigencia (veto) de la Dirección de Finanzas.
+- **Drivers Agrupados:** RF-05, RF-06, RF-12, QA-04, QA-07, RC-05, RC-01.
+
+### 4. Inventario Unificado y Reserva Dinámica
+- **Descripción:** Consolidación de existencias entre centros de distribución y las 32 tiendas (vía sincronización batch del POS). Implementación de reserva de inventario temporal (15 minutos) durante la compra para evitar quiebres y ventas duplicadas.
+- **Criterio de Priorización:** **Valor / Riesgo.** Vital para reducir los errores de despacho actuales y gestionar la concurrencia masiva (8x) en Black Friday.
+- **Drivers Agrupados:** RF-03, RF-09, QA-01, RC-02.
+
+## SHOULD HAVE (Importantes pero no bloqueantes para la salida a producción inicial)
+Aportan un gran valor y mejoran la experiencia y operación significativamente, pero el sistema puede operar temporalmente mediante contenciones si hubiera retrasos.
+
+### 5. Fulfillment Flexible y Despacho Resiliente
+- **Descripción:** Capacidad de definir y modificar el método de entrega post-compra (pickup, envío desde CD, envío desde tienda). Incluye conexión tolerante a fallos (timeouts) con LogiExpress para generación de guías.
+- **Criterio de Priorización:** **Valor Operativo.** Objetivo de Logística para reducir en un 70% los costos de $25 por cada despacho fallido.
+- **Drivers Agrupados:** RF-08, QA-05.
+
+### 6. Gestión Integral de Devoluciones y Atención al Cliente
+- **Descripción:** Historial consolidado disponible para el call center que vincula la compra original, el método de pago, envío, facturación y generación de reembolsos, reduciendo los 7 días hábiles que toma este proceso actualmente.
+- **Criterio de Priorización:** **Valor (Experiencia del Cliente).** Agiliza un proceso manual y doloroso, pero SGO-Logic puede procesar ventas (Must) aunque las devoluciones se gestionen parcialmente a mano al inicio.
+- **Drivers Agrupados:** RF-07, RF-13.
+
+## COULD HAVE (Deseables para maduración del producto)
+Mejoras que incrementan la calidad del servicio al usuario final, pero cuyo impacto en la operación base de la empresa es bajo si fallan temporalmente.
+
+### 7. Motor de Notificaciones Multicanal Proactivas
+- **Descripción:** Envío de alertas automatizadas por SMS, Correo o Push a los clientes respecto al estado de su orden (preparada, en tránsito, entregada, incidencias). Implementado en background.
+- **Criterio de Priorización:** **Valor Menor / Impacto Arquitectónico Bajo.** Mejora la percepción del cliente, pero se ejecutará como mecanismo *fire-and-forget* para no entorpecer los servicios base.
+- **Drivers Agrupados:** RF-11, QA-06.
+
+## WON'T HAVE (Excluidas del alcance del sistema o para iteraciones futuras)
+Decisiones explícitas de no construir o modificar funcionalidades específicas para cumplir las restricciones del proyecto.
+
+### 8. Administración Directa del Catálogo Comercial y Precios
+- **Descripción:** Mantenimiento (CRUD) de productos, definición de precios, creación de combos promocionales y planes de financiamiento.
+- **Criterio de Priorización:** **Restricción de Alcance.** Como se aclara en el diagnóstico, SGO-Logic funcionará exclusivamente como consumidor de un Catálogo Comercial externo; no lo administrará.
+
+### 9. Sustitución de Sistemas Legacy y Despliegue Inicial Cloud
+- **Descripción:** Reemplazo de los ERP-Core (AS/400) o POS de piso, y lanzamiento primario de contenedores en la nube pública (AWS/GCP/Azure).
+- **Criterio de Priorización:** **Restricciones de Gerencia y TI.** Vetado expresamente por la Dirección y limitado por el presupuesto operativo (OPEX) máximo de $1,200 mensuales. La infraestructura será on-premise mediante Docker Compose.
+- **Drivers Agrupados:** RC-01, RC-02, RC-04, RC-07.
+
+
+---
+
 
 ### Diagramas de Casos de Uso Expandidos (CDU) - SGO-Logic
 
@@ -922,6 +994,10 @@ El sistema garantiza:
 
 
 
+
+
+---
+
 ## Drivers de Calidad (Escenarios de Atributos de Calidad - EAC)
 
 A continuación se presentan los Escenarios de Atributos de Calidad estructurados en seis partes (Fuente, Estímulo, Artefacto, Entorno, Respuesta y Medida de Respuesta). 
@@ -1010,25 +1086,106 @@ A continuación se presentan los Escenarios de Atributos de Calidad estructurado
 
 
 
-## Drivers de Restricción
+
+---
+
+# Drivers de Restricción
 
 Los drivers de restricción son condiciones que el equipo de arquitectura no puede cambiar. Delimitan el espacio de soluciones posibles y deben ser respetados por todas las decisiones de diseño.
 
-| ID | Restricción | Tipo | Implicación en el Diseño |
-|----|-------------|------|-------------------------|
-| RC-01 | El **ERP-Core (AS/400)** no será reemplazado ni modificado. Su único mecanismo de integración disponible es la recepción de archivos CSV/XML cada 30 minutos. | Técnica / Organizacional | Adaptador batch (Anti-Corruption Layer) en el Servicio de Facturación. Genera archivos CSV/XML cada 30 min y los deposita vía SFTP. Cero cambios al AS/400. |
-| RC-02 | Las **32 instancias del sistema POS** no forman parte de un programa de reemplazo. | Técnica / Organizacional | El POS exporta archivos de inventario local. SGO-Logic los consume mediante un job de lectura batch cada 5 minutos. No se modifica el POS. |
-| RC-03 | Contrato con **PayKlik** (pasarela de pagos) vigente por **3 años**. Interfaz REST, latencia nominal ~800 ms, picos hasta 5 s. | Contractual | Integración obligatoria con PayKlik. Adaptador resiliente con Circuit Breaker (Resilience4j) y cola de pagos en RabbitMQ para tolerar sus caídas. |
-| RC-04 | Contrato con **LogiExpress** (proveedor logístico) vigente por **2 años**. ~2% de solicitudes terminan en timeout. | Contractual | Integración obligatoria con LogiExpress. Adaptador con retry y backoff exponencial + Dead Letter Queue para gestionar los timeouts. |
-| RC-05 | **Presupuesto fijo**: CAPEX $150,000 total. OPEX ≤ $1,200 mensuales. | Financiera | Stack 100% open-source. CAPEX estimado: ~$23k–$37k. OPEX estimado: ~$270–$450/mes. El resto del CAPEX queda disponible para Fase 2. |
-| RC-06 | **Cumplimiento SAT**: Emisión de facturas electrónicas XML con CUI y serie autorizada. | Regulatoria | Servicio de Facturación con cola asíncrona + retry ante la SAT. Event Sourcing para mantener registro inmutable. |
-| RC-07 | **PCI-DSS**: No almacenar números completos de tarjeta (PAN) ni CVV. | Regulatoria / Seguridad | El Servicio de Pagos almacena únicamente tokens de referencia de PayKlik. Los datos sensibles de tarjeta residen exclusivamente en PayKlik. |
-| RC-08 | **Protección de datos personales** conforme a normativa de Guatemala, El Salvador y Costa Rica. | Regulatoria / Legal | Cifrado en tránsito (TLS 1.2+), cifrado en reposo (AES-256). Minimización de datos. Retención: datos transaccionales 5 años (SAT), datos personales purgables a solicitud. |
-| RC-09 | **Despliegue inicial on-premises**. La arquitectura debe permitir migración planificada a la nube. | Técnica / Financiera | Servicios empaquetados como imágenes Docker. Docker Compose en servidores on-prem. Migración futura: mismas imágenes → Cloud Run / ECS. RTO ≤ 2h, RPO ≤ 5 min. |
-| RC-10 | **Stack tecnológico del equipo**: El equipo domina Java y .NET con conocimientos básicos de Docker. | Técnica / Organizacional | Servicios core en Java 17 + Spring Boot 3. Servicios secundarios en .NET 8. Docker Compose en vez de Kubernetes. Sin tecnologías exóticas. |
-| RC-11 | **Minimización del consumo energético** de la infraestructura. | Ambiental / Operacional | Contenedores Docker (más eficientes que VMs). Escalado bajo demanda: réplicas adicionales solo durante picos (Black Friday), se reducen después. Consolidación en 2–3 servidores. |
-| RC-12 | **Black Friday inamovible** (noviembre). Primer mes debe proteger pagos y facturación. | Temporal | Semanas 1–2: Pagos resilientes (CB + cola). Semanas 3–4: Facturación asíncrona. Mes 2: Inventario + Órdenes. Mes 3: Logística + Notificaciones + Monitoreo completo. |
+---
 
-## Matrices de Trazabilidad
+## Tabla de Restricciones
 
-> Las matrices de trazabilidad completas se encuentran en [`Contexto, Decisiones y Trazabilidad/matrices-trazabilidad.md`](<Contexto, Decisiones y Trazabilidad/matrices-trazabilidad.md>)
+| ID | Restricción | Tipo | Origen | Implicación en el Diseño |
+|----|-------------|------|--------|--------------------------|
+| RC-01 | El ERP-Core (AS/400, década de 1990) no será reemplazado ni modificado dentro del horizonte de esta iniciativa. Su único mecanismo de integración disponible es la recepción de archivos CSV o XML en intervalos de 30 minutos. | Técnica / Organizacional | Decisión de Junta Directiva | Se diseña un adaptador batch (Anti-Corruption Layer) dentro del Servicio de Facturación que genera los archivos CSV/XML cada 30 minutos y los deposita vía SFTP/filesystem. Cero cambios al AS/400. |
+| RC-02 | Las 32 instancias del sistema POS (Punto de Venta) en las tiendas físicas no forman parte de un programa de reemplazo. | Técnica / Organizacional | Enunciado del proyecto | El POS exporta archivos de inventario local. SGO-Logic los consume mediante un job de lectura batch cada 5 minutos. No se modifica el POS; solo se leen sus archivos de salida ya existentes. |
+| RC-03 | El contrato con PayKlik (pasarela de pagos) tiene vigencia de 3 años y no puede rescindirse. Su interfaz disponible es REST con latencia nominal de ~800 ms y picos de hasta 5 segundos. | Contractual | Contrato vigente | SGO-Logic debe integrar obligatoriamente PayKlik. Se diseña un adaptador resiliente con Circuit Breaker (Resilience4j) y cola de pagos en RabbitMQ para tolerar sus caídas. |
+| RC-04 | El contrato con LogiExpress (proveedor logístico) tiene vigencia de 2 años. Su interfaz disponible es REST. Aproximadamente 1 de cada 50 solicitudes termina por timeout. | Contractual | Contrato vigente | SGO-Logic debe integrar obligatoriamente LogiExpress. Se diseña un adaptador con retry y backoff exponencial más Dead Letter Queue para gestionar el 2% de timeouts. |
+| RC-05 | Presupuesto fijo: CAPEX total de $150,000 para el proyecto. OPEX operativo no debe superar $1,200 mensuales sin justificación y aprobación adicional. | Financiera | Gerencia / Junta Directiva | Stack tecnológico 100% open-source (Java OpenJDK, .NET, PostgreSQL, RabbitMQ, Redis, Kong, Docker, ELK, Prometheus, Grafana). CAPEX estimado: ~$23k-$37k. OPEX estimado: ~$270-$450/mes. |
+| RC-06 | Cumplimiento fiscal SAT: es obligatorio emitir facturas electrónicas en XML con CUI y serie autorizada. Cada documento debe conservar su CUI y serie. | Regulatoria / Legal | Normativa SAT Guatemala | Servicio de Facturación con cola asíncrona más retry ante la SAT. Event Sourcing para mantener registro inmutable de cada factura y nota de crédito. |
+| RC-07 | Protección de datos de pago (PCI-DSS): no se almacenan números completos de tarjeta (PAN) ni códigos CVV. Solo se guardan tokens de referencia del proveedor (PayKlik). | Regulatoria / Seguridad | Políticas corporativas + PCI-DSS | El Servicio de Pagos almacena únicamente tokens de referencia de PayKlik. Toda la lógica de datos sensibles de tarjeta reside exclusivamente en PayKlik. |
+| RC-08 | Normativa de protección de datos personales aplicable en Guatemala, El Salvador y Costa Rica. | Regulatoria / Legal | Marco legal regional | Cifrado en tránsito (TLS 1.2+), cifrado en reposo (AES-256). Minimización de datos personales recolectados. Retención definida: datos transaccionales 5 años (SAT), datos personales purgables a solicitud del titular. |
+| RC-09 | El despliegue se realizará en infraestructura local para aprovechar la inversión existente y mantener control operativo durante la adopción. La arquitectura debe permitir migración planificada a la nube conforme aumente la demanda. | Técnica / Financiera | Decisión de Gerencia de TI | Todos los servicios se empaquetan como imágenes Docker. Orquestación inicial con Docker Compose. Migración futura: mismas imágenes a Cloud Run / ECS / AKS. RabbitMQ a CloudAMQP. PostgreSQL a Cloud SQL / RDS. |
+| RC-10 | El equipo interno tiene experiencia principalmente en Java y .NET y conocimientos básicos de Docker. Una alternativa que requiera competencias distintas debe incluir impacto de adopción, capacitación y operación. | Técnica / Organizacional | Perfil del equipo de TI | Servicios core en Java 17 + Spring Boot 3. Servicios secundarios en .NET 8 + ASP.NET Core. Docker Compose en vez de Kubernetes. Sin tecnologías exóticas que requieran curvas de aprendizaje extensas. |
+| RC-11 | La organización desea minimizar el consumo energético de la infraestructura. | Ambiental / Operacional | Política organizacional | Contenedores Docker (más eficientes que VMs). Escalado bajo demanda: réplicas adicionales solo durante picos (Black Friday), se reducen después. Consolidación en 2-3 servidores en vez de uno por servicio. |
+| RC-12 | La fecha del evento comercial Black Friday es noviembre y no puede trasladarse. El enunciado exige contar durante el primer mes con una ruta viable para proteger los procesos de pagos y facturación. | Temporal / Operacional | Calendario comercial | Semanas 1-2: Pagos resilientes (Circuit Breaker + cola). Semanas 3-4: Facturación asíncrona. Mes 2: Inventario y Órdenes omnicanal. Mes 3: Logística, Notificaciones y Monitoreo completo. |
+
+
+
+---
+
+# Matrices de Trazabilidad Arquitectónica
+
+Estas matrices garantizan que cada decisión técnica tomada en el diseño de SGO-Logic tenga un respaldo en las necesidades del negocio y los requerimientos de los stakeholders.
+
+## 1. Matriz: Stakeholder → Preocupación → Driver
+
+| Stakeholder | Preocupación | Drivers que la atienden |
+|-------------|-------------|----------------------|
+| **Dirección / Gerencia General** | No tocar ERP-Core ni POS, rentabilidad del proyecto, presupuesto acotado. | RC-01, RC-02, RC-04 |
+| **Carlos Méndez (Gerente TI)** | Continuidad en picos (Black Friday), mantenibilidad por equipo interno, monitoreo de externos. | QA-01, QA-09, RF-10 |
+| **Ana Lucía Fuentes (Dir. Finanzas)** | Trazabilidad fiscal, cumplimiento SAT, evidencia de transacción inmediata, conciliación ERP. | QA-04, QA-07, RC-05, RF-06, RF-12 |
+| **Roberto Quezada (Jefe Logística)** | Reducción de errores logísticos (70%), visibilidad de inventario y pedidos en tiempo real. | RF-08, RF-09, QA-05 |
+| **Directora de Comercialización** | Experiencia consistente, sin silos entre canales, carrito unificado. | RF-01, RF-02, RF-13 |
+| **Jefe de Operaciones** | Evitar pérdidas de ingresos por caídas (PayKlik), soporte a demanda 8×. | QA-02, QA-01, RF-04 |
+| **Cliente final** | Consultas rápidas (< 5 s), notificaciones de estado, compra fluida en cualquier canal. | QA-03, RF-10, RF-11, RF-01 |
+| **SAT (Regulador)** | Obligatoriedad de factura XML con CUI/Serie, auditorías confiables. | RC-05, QA-07, RF-05 |
+
+---
+
+## 2. Matriz: Driver → Decisión Arquitectónica (ADR) → Vista del DDA
+
+| Driver | Decisión (ADR que lo atiende) | Diagrama/Vista donde se refleja |
+|--------|------------------------------|--------------------------------|
+| **QA-01** (Escalabilidad 8×) | ADR-001 (SOA), ADR-006 (Docker Compose --scale) | Vista de Despliegue (réplicas ×N), Vista de Bloques |
+| **QA-02** (Disponibilidad pagos) | ADR-003 (Circuit Breaker + Cola de RabbitMQ) | Vista de Componentes (CB en adaptador), Despliegue (colas durables) |
+| **QA-03** (Rendimiento < 5 s) | ADR-009 (CQRS con vistas materializadas) | Vista de Componentes (separación Lectura/Escritura en Órdenes) |
+| **QA-04** (Evidencia auditoría < 1s) | ADR-005 (Event Sourcing) | Vista de Componentes (Event Store DB), Despliegue (Stack ELK) |
+| **QA-05** (Resiliencia Logística) | ADR-003 (Circuit Breaker y Retry en Logística) | Vista de Componentes (Adaptador LogiExpress con CB y Retry) |
+| **QA-06** (Resiliencia Notificaciones) | ADR-010 (Eventos Fire-and-forget) | Vista de Componentes (Consumer desacoplado en Notificaciones) |
+| **QA-07** (Auditabilidad SAT) | ADR-005 (Event Sourcing) | Vista de Componentes (JSONB en PostgreSQL), Despliegue (ELK) |
+| **QA-08** (Interoperabilidad sin modificar) | ADR-004 (ACL ERP), ADR-008 (ACL POS) | Diagrama de Contexto, Vista de Componentes (Adaptadores Anti-Corruption) |
+| **QA-09** (Mantenibilidad TI interno) | ADR-001 (SOA), ADR-002 (RabbitMQ), ADR-006 (Docker) | Vista de Bloques (6 servicios, stack .NET/Java), Despliegue |
+| **QA-10** (Portabilidad a Nube) | ADR-006 (Contenedores) | Vista de Despliegue (Abstracción en contenedores Docker) |
+| **RC-01** (Restricción ERP) | ADR-004 (Adaptador batch CSV/XML) | Diagrama de Contexto (flechas batch), Vista de Componentes |
+| **RC-02** (Restricción POS) | ADR-008 (Lector batch cada 5 min) | Diagrama de Contexto, Vista de Componentes (Servicio Inventario) |
+| **RC-03** (Contratos vigentes externos) | ADR-003 (Circuit Breaker a externos) | Vista de Componentes, Diagrama de Contexto |
+| **RC-04** (Restricción Presupuesto) | ADR-001, ADR-002, ADR-006 (Open Source) | Vista de Despliegue (Servidores on-prem, Stack libre) |
+| **RC-05** (Restricción SAT) | ADR-005, ADR-007 (Facturación asíncrona) | Vista de Componentes (Adaptador SAT + Retry), Despliegue (DLQ) |
+| **RC-06** (No almacenar PAN/CVV) | ADR-003 (Manejo delegado a pasarela) | Vista de Componentes (Servicio de Pagos) |
+| **RC-07** (Despliegue inicial on-prem) | ADR-006 (Docker Compose) | Vista de Despliegue |
+| **RC-08** (UML 2.5.1) | Directriz del DDA general | Todos los diagramas del documento |
+| **RC-09** (Black Friday inamovible) | Cronograma iterativo | Documento de gestión / Entregables por sprint |
+| **RC-10** (Consumo energético minimizado) | ADR-006 (Contenedores vs VMs) | Vista de Despliegue |
+| **RC-11** (Protección de datos y cifrado) | Restricción general de seguridad | Vista de Despliegue (Conexiones HTTPS/TLS implícitas) |
+| **RF-01** (Compra Omnicanal) | ADR-001 (SOA + API Gateway) | Diagrama de Contexto, Vista de Bloques (API Gateway único) |
+| **RF-02** (Carrito unificado) | ADR-001 (SOA - Módulo Identidad Cliente) | Vista de Componentes (Servicio Órdenes + Redis) |
+| **RF-03** (Reserva inventario TTL) | Estándar de diseño del Servicio de Inventario | Vista de Componentes (Servicio de Inventario) |
+| **RF-04** (Pagos Multi-método) | ADR-003 (Circuit Breaker y Cola) | Vista de Componentes (Servicio Pagos), Despliegue (RabbitMQ) |
+| **RF-05** (Facturación Electrónica SAT) | ADR-007 (Asíncrono) | Vista de Componentes (Servicio Facturación) |
+| **RF-06** (Trazabilidad completa) | ADR-005 (Event Sourcing) | Vista de Componentes (Event Store DB) |
+| **RF-07** (Devoluciones y reembolsos) | Flujo core de negocio orquestado en Órdenes | Vista de Componentes (Servicio Órdenes) |
+| **RF-08** (Fulfillment flexible) | Diseño de Servicio Logística | Vista de Componentes (Servicio Logística) |
+| **RF-09** (Inventario Unificado) | ADR-008 (Sincronización POS) | Vista de Componentes (Servicio Inventario) |
+| **RF-10** (Consulta de estado orden) | ADR-009 (CQRS) | Vista de Componentes (Órdenes) |
+| **RF-11** (Notificaciones multi-canal) | ADR-010 (Fire-and-forget) | Vista de Componentes (Notificaciones) |
+| **RF-12** (Sincronización ERP) | ADR-004 (ACL ERP) | Vista de Componentes (Facturación) |
+| **RF-13** (Historial consolidado) | ADR-001 (Módulo Identidad) | Vista de Componentes (Órdenes) |
+
+---
+
+## 3. Matriz End-to-End: Evidencia de Negocio → Validación Técnica
+
+Esta matriz demuestra el hilo conductor completo, desde el dato puro extraído de la operación comercial hasta cómo será probado y validado en el software construido.
+
+| Evidencia de Negocio (Dato del Caso) | Stakeholder (Quién lo sufre/exige) | Preocupación | Driver (RF/QA/RC) | ADR | Vista / Diagrama | Mecanismo de Validación |
+|--------------------------------------|------------------------------------|-------------|-------------------|-----|------------------|-------------------------|
+| **Pérdida de $150,000 en 45 min por caída de pasarela** | Jefe de Operaciones | Evitar caídas y órdenes perdidas. Soportar Black Friday. | **QA-02, RF-04** | ADR-003 (CB + Cola) | Componentes, Despliegue | Prueba de inyección de fallos (Simular timeout de PayKlik y validar encolamiento y retry automático). |
+| **Crecimiento a 8x ventas en Black Friday** | Carlos Méndez (Gerente TI) | El sistema debe escalar rápido y ser soportado on-premise. | **QA-01, QA-09** | ADR-001 (SOA), ADR-006 (Compose) | Despliegue (Réplicas), Bloques | Pruebas de carga / stress tests simulando demanda 8x para validar latencia < 5s. |
+| **Veto por auditoría anual de SAT / Multas fiscales** | Ana Lucía (Finanzas) | Reconstruir cada transacción, quién, cuándo y qué cambió en < 1s. | **QA-04, QA-07, RC-05, RF-06** | ADR-005 (Event Sourcing) | Componentes, Despliegue (ELK) | Auditoría simulada: Búsqueda en Grafana/Kibana de una orden aleatoria validando tiempo de respuesta < 1s. |
+| **ERP-Core de 1990 no se reemplazará** | Dirección / Gerencia | Sincronización ineludible con sistema legado sin modificarlo. | **RC-01, RF-12** | ADR-004 (Adaptador ACL Batch) | Contexto, Componentes | Validación de generación de archivos CSV/XML cada 30 min y consumo simulado. |
+| **Envíos incorrectos cuestan $25 cada uno** | Roberto Quezada (Logística) | Fulfillment flexible, inventario en tiempo real para evitar doble venta. | **RF-08, RF-09, RF-03** | ADR-008 (POS Sync), ADR-001 | Contexto, Componentes | Prueba End-to-End de compra concurrente de la última unidad disponible (validar que el TTL de 15 min libere el stock y bloquee el 2do cliente). |
+| **Silos impiden seguir compra iniciada en otro canal** | Directora Comercial | El carrito debe ser el mismo en cualquier plataforma. | **RF-01, RF-02** | ADR-001 (API Gateway + Redis) | Bloques (Kong + Redis de sesión) | Prueba de usuario cruzada: Iniciar carrito en app, cerrar, abrir en web y completar pago sin perder ítems. |
+
