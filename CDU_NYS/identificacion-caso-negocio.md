@@ -38,70 +38,141 @@ Actualmente, MegaStore permite que sus clientes compren de varias maneras:
 8. **Contabilidad automática**: Los datos de ventas se sincronizan automáticamente con el sistema contable
 
 ---
-
-## 2. Visión General: Los 8 Procesos Principales
-
-Pensemos en SGO-Logic como un "director" que coordina 8 procesos principales de negocio:
-
+## 2. Diagrama Alto Nivel: Sistema y Actores
+ 
+Este diagrama muestra la visión más simple del proyecto: el sistema central y quiénes interactúan con él.
+ 
 <div align="center">
 
-![CUN - Alto Nivel](imagCDU/cdu_altonivel.png)
-
-**Figura 0**: Los 8 procesos principales de SGO-Logic y sus actores
-
+![Alto Nivel](/CDU_NYS/imagCDU/ALTO_NIVEL_PR.png)
+ 
+**Figura 1**: Diagrama Alto Nivel - SGO-Logic con sus 6 actores principales
+ 
 </div>
 
-### 2.1 Los 8 Procesos Explicados en Simple
+### 2.1 ¿Qué Es Este Diagrama?
+ 
+Este es el diagrama **más simple y general** del proyecto. Muestra:
+ 
+- **Centro:** SGO-Logic - El sistema omnicanal que une todo
+- **Alrededor:** 6 actores (usuarios/roles) que interactúan con el sistema
 
-**1. Gestionar Compra Omnicanal**
-- El cliente puede comprar desde cualquier lugar (tienda, web, app, teléfono)
-- Agrega productos al carrito, elige cómo pagar y dónde recibir
-- Todo se registra en una sola orden unificada
-
-**2. Gestionar Inventario Unificado**
-- Las 32 tiendas comparten un mismo inventario
-- Cuando vende un producto en la web, automáticamente las tiendas lo ven
-- El cliente siempre ve la disponibilidad correcta
-
-**3. Procesar Pagos**
-- El cliente elige cómo pagar (tarjeta, transferencia, billetera digital)
-- El sistema valida y autoriza el pago automáticamente
-- Si falla, lo reintenta automáticamente
-
-**4. Emitir Facturación**
-- Se genera automáticamente una factura electrónica XML
-- Se envía a la SAT (organismo tributario) automáticamente
-- El cliente recibe su factura por email
-
-**5. Gestionar Despacho y Entrega**
-- El sistema decide de dónde enviar (desde qué tienda o centro de distribución)
-- Genera automáticamente la guía de envío con LogiExpress (empresa de envíos)
-- El cliente recibe un enlace para rastrear su paquete
-
-**6. Gestionar Devoluciones y Reembolsos**
-- El cliente puede devolver un producto dentro de 30 días
-- El sistema valida automáticamente si es válida
-- El dinero se devuelve automáticamente a la tarjeta del cliente
-
-**7. Atender al Cliente**
-- Los agentes del call center pueden crear órdenes, consultar estado, procesar devoluciones
-- Todos pueden ver el historial completo del cliente
-- Se registra cada interacción para consulta futura
-
-**8. Conciliar Ventas con ERP**
-- Cada 30 minutos, el sistema envía automáticamente todos los datos de ventas al sistema contable (AS/400)
-- Esto mantiene la contabilidad siempre actualizada
-- No hay que hacer nada manual
+### 2.2 Los 6 Actores Principales
+ 
+| Actor | Rol | Interacción |
+|-------|-----|-------------|
+| **Cliente** | El que compra | Realiza compras desde web, app, tienda o teléfono |
+| **Operaciones** | Vendedor de tienda | Gestiona compras en punto de venta (POS) |
+| **Dirección Financiera** | Gerencia de finanzas | Revisa facturas, ventas, conciliación |
+| **Logística** | Área de envíos | Prepara, empaca y despacha órdenes |
+| **Call Center** | Agente de atención | Atiende llamadas y crea órdenes por teléfono |
+| **Job Batch** | Proceso automático | Sincroniza datos con el sistema contable cada 30 min |
+ 
+### 2.3 ¿Por Qué Este Diagrama Es Importante?
+ 
+ Muestra quiénes usan el sistema
+ Muestra que todos interactúan con UN SOLO sistema (omnicanal)
+ Es la vista más general para que gerencia y stakeholders entiendan el proyecto
 
 ---
 
-## 3. Cómo Se Relacionan Estos 8 Procesos
+## 3. Primera Descomposición: Sistema, Procesos de Negocio y Actores
+ 
+Este diagrama muestra la estructura completa: el sistema central, los 8 procesos de negocio (CUN) que contiene, y los 6 actores que interactúan con él.
+ 
+<div align="center">
+
+![Primera Descomposición](/CDU_NYS/imagCDU/cdu_altonivel.png)
+ 
+**Figura DS**: Primera Descomposición - SGO-Logic con sus 8 procesos de negocio (CUN) y 6 actores
+ 
+</div>
+
+### 3.1 ¿Qué Es Esta Descomposición?
+ 
+La **descomposición** es un desglose visual que muestra:
+ 
+- **Centro:** El sistema SGO-Logic (azul)
+- **Adentro del sistema:** Los 8 procesos de negocio que realiza (óvalos amarillos)
+- **Alrededor:** Los 6 actores que interactúan con el sistema (stick figures)
+Es el paso intermedio entre la vista simple (solo sistema + actores) y la vista detallada (4 niveles con especificación técnica).
+ 
+### 3.2 Los 8 Procesos de Negocio (CUN - Casos de Uso de Negocio)
+ 
+Son los **8 procesos principales** que MegaStore realiza. Describen **QUÉ HACE EL NEGOCIO**, sin importar si se hace manualmente o con software.
+ 
+**Los 8 CUN:**
+ 
+1. **CUN-01: Gestionar Compra Omnicanal**
+   - El cliente compra desde cualquier canal
+   - Se crea una orden única
+2. **CUN-02: Gestionar Inventario Unificado**
+   - Las 32 tiendas comparten el mismo inventario
+   - El cliente siempre ve disponibilidad correcta
+3. **CUN-03: Procesar Pagos**
+   - El cliente paga con tarjeta, transferencia o billetera digital
+   - El pago se valida automáticamente
+4. **CUN-04: Emitir Facturación**
+   - Se genera factura electrónica
+   - Se envía a la SAT (autoridad tributaria)
+5. **CUN-05: Gestionar Despacho y Entrega**
+   - El sistema decide desde dónde enviar
+   - Se genera guía de envío con LogiExpress
+   - Cliente rastrea su paquete
+6. **CUN-06: Gestionar Devoluciones y Reembolsos**
+   - Cliente puede devolver dentro de 30 días
+   - El dinero se devuelve automáticamente
+7. **CUN-07: Atender al Cliente**
+   - Agentes del call center atienden llamadas
+   - Pueden crear órdenes y resolver problemas
+8. **CUN-08: Conciliar Ventas con ERP**
+   - Cada 30 minutos se sincronizan datos de ventas
+   - El sistema contable se actualiza automáticamente
+
+
+### 3.3 Relación Entre Actores y Procesos
+ 
+Cada actor interactúa con ciertos procesos:
+ 
+- **Cliente:** CUN-01 (Compra), CUN-02 (Inventario), CUN-03 (Pagos)
+- **Operaciones:** CUN-01 (Compra)
+- **Dirección Financiera:** CUN-04 (Facturación), CUN-06 (Devoluciones)
+- **Logística:** CUN-05 (Despacho)
+- **Call Center:** CUN-07 (Atender Cliente), CUN-01 (Crear Compras)
+- **Job Batch:** CUN-08 (Conciliación con ERP)
+
+### 3.4 Tabla de Descomposición: Los 8 CUN y Sus CDU Correspondientes
+ 
+| # | Proceso de Negocio (CUN) | Código | Caso de Uso del Sistema (CDU) | Lo que el Sistema Hace |
+|---|--------------------------|--------|-------------------------------|----------------------|
+| 1 | Gestionar Compra Omnicanal | CDU-01 | Gestionar Compra Omnicanal | Cliente compra en cualquier canal. Sistema unifica en una orden |
+| 2 | Gestionar Inventario Unificado | CDU-02 | Gestionar Inventario Unificado | Sistema sincroniza 32 tiendas en tiempo real. Cliente siempre ve disponibilidad correcta |
+| 3 | Procesar Pagos | CDU-03 | Procesar Pagos | Sistema valida y autoriza pagos (tarjeta, transferencia, billetera). Reintenta automáticamente si falla |
+| 4 | Emitir Facturación | CDU-04 | Facturación Electrónica | Sistema genera XML automáticamente, lo envía a SAT, emite comprobante al cliente |
+| 5 | Gestionar Despacho y Entrega | CDU-05 | Gestionar Despacho y Entrega | Sistema genera guía de envío, coordina con LogiExpress, cliente rastrea su paquete |
+| 6 | Gestionar Devoluciones | CDU-06 | Gestionar Devoluciones y Reembolsos | Sistema procesa devoluciones automáticamente, valida condiciones, devuelve dinero |
+| 7 | Atender al Cliente | CDU-07 | Atender al Cliente | Agente de call center puede crear compras, consultar estado, resolver problemas |
+| 8 | Conciliar Ventas con ERP | CDU-08 | Conciliar Ventas con ERP | Sistema envía datos de ventas al sistema contable cada 30 minutos |
+ 
+### 3.5 ¿Por Qué Esta Descomposición Es Importante?
+ 
+**Visibilidad completa:** Se ve el sistema, sus 8 procesos y quiénes lo usan
+ 
+**Mapeo de responsabilidades:** Cada actor sabe con qué procesos interactúa
+ 
+**Estructura clara:** Muestra que todos los procesos están dentro del mismo sistema omnicanal
+ 
+**Transición a especificación técnica:** Cada CUN será especificado en detalle en un CDU correspondiente
+ 
+---
+
+### 3.6 Cómo Se Relacionan Estos 8 Procesos
 
 Imaginemos que un cliente realiza una compra. Aquí es lo que sucede:
 
 <div align="center">
 
-![Releación Procesos](imagCDU/relacionCDU.png)
+![Releación Procesos](/CDU_NYS/imagCDU/relacionCDU.png)
 
 **Figura RL**: la relación de los 8 procesos.
 
@@ -145,51 +216,74 @@ SGO-Logic tiene diferentes usuarios, cada uno con un rol específico:
 
 ---
 
-## 5. Primera Descomposición: De CUN (Procesos de Negocio) a CDU (Casos de Uso del Sistema)
+## 5. Descomposición de CUN-01: De Proceso a Especificación Técnica
+ 
+Este diagrama muestra los **4 NIVELES de profundidad** que desglosan un proceso de negocio hasta la especificación técnica completa del sistema.
 
 <div align="center">
+
+![Primera Descomposición CUN-01](/CDU_NYS/imagCDU/1RA_DESC_CUN01.png)
  
-![Primera Descomposición](imagCDU/PrimeraDescom.png)
-
-**Figura PD**: Diagrama de descomposición mostrando los 4 niveles (Sistema -> Procesos -> Componentes -> Casos de Uso)
-
+**Figura DS**: Primera Descomposición - SGO-Logic con sus 8 procesos de negocio (CUN) y 6 actores
+ 
 </div>
+ 
+### 5.1 Los 4 Niveles Explicados
+ 
+Este es el nivel más detallado del análisis. Toma **CUN-01 (Gestionar Compra Omnicanal)** y lo desglosa en 4 niveles:
+ 
+**Nivel 1:** El sistema general  
+**Nivel 2:** El proceso de negocio específico  
+**Nivel 3:** Sus componentes/pasos  
+**Nivel 4:** La especificación técnica (CDU)  
+ 
+**Analogía:** Es como armar un auto:
+- Nivel 1: "Necesitamos un auto"
+- Nivel 2: "Necesitamos el subsistema de propulsión"
+- Nivel 3: "El motor necesita cilindros, pistones, válvulas"
+- Nivel 4: "Especificación técnica exacta de cada pieza con tolerancias y materiales"
 
-### 5.1 ¿Qué Es la Descomposición?
+### 5.2 NIVEL 3: Los 5 Componentes de CUN-01
  
-Cuando planteamos un proceso de negocio (como "Gestionar Compra Omnicanal"), ese proceso es muy general. 
+Cuando MegaStore dice **"Gestionar Compra Omnicanal"** (CUN-01), en realidad significa que el proceso se divide en 5 componentes/actividades específicas:
  
-La **descomposición** es pasar de ese proceso general a especificar **exactamente qué debe hacer el sistema paso a paso**.
+#### **1. Identificar Cliente**
+El cliente se registra o inicia sesión en el sistema
+- ¿Es cliente nuevo o existente?
+- ¿Qué información necesitamos?
+- ¿Cómo validamos su identidad?
+#### **2. Consultar Catálogo**
+El cliente navega y busca productos
+- ¿Qué productos están disponibles?
+- ¿Cuáles son sus precios?
+- ¿Cuáles tienen stock?
+#### **3. Gestionar Carrito**
+El cliente agrega/quita productos a su carrito
+- ¿Cuántos de cada producto?
+- ¿Puedo cambiar después?
+- ¿Se guarda si cierro sesión?
+#### **4. Verificar Disponibilidad**
+El sistema valida si realmente hay stock
+- ¿Hay suficiente cantidad?
+- ¿En qué tienda está?
+- ¿En qué centro de distribución?
+#### **5. Crear Orden**
+El sistema genera la orden oficial
+- Se asigna número único
+- Se reserva el inventario
+- Se registra en el sistema
+
+### 5.3 NIVEL 4: La Especificación Técnica (CDU-01)
  
-**Ejemplo:**
-- **CUN (General)**: "Gestionar Compra Omnicanal"
-- **CDU (Detallado)**: "El sistema debe permitir que un cliente identifique su usuario, agregue productos al carrito, valide disponibilidad, cree una orden, seleccione método de pago, elija modalidad de entrega y confirme la compra"
-### 5.2 Tabla de Descomposición: Cómo Cada Proceso Se Divide en Casos de Uso
+Estos 5 componentes se convierten en la **especificación técnica completa** del **CDU-01: Gestionar Compra Omnicanal**.
  
-**Cada Proceso de Negocio (CUN) se convierte en un Caso de Uso del Sistema (CDU)**
+**CDU-01** describe **EXACTAMENTE** cómo el software debe implementar el proceso:
  
-| # | Proceso de Negocio (CUN) | Código | Caso de Uso del Sistema (CDU) | Lo que el Sistema Hace |
-|---|--------------------------|--------|-------------------------------|----------------------|
-| 1 | Gestionar Compra Omnicanal | CDU-01 | Gestionar Compra Omnicanal | Cliente compra en cualquier canal (web, app, tienda, call center). Sistema unifica todas las compras |
-| 2 | Gestionar Inventario Unificado | CDU-02 | Gestionar Inventario Unificado | Sistema sincroniza inventario de 32 tiendas en tiempo real. Cliente siempre ve disponibilidad correcta |
-| 3 | Procesar Pagos | CDU-03 | Procesar Pagos | Sistema valida y autoriza pagos (tarjeta, transferencia, billetera). Reintenta automáticamente si falla |
-| 4 | Emitir Facturación | CDU-04 | Facturación Electrónica | Sistema genera XML automáticamente, lo envía a SAT y emite comprobante al cliente |
-| 5 | Gestionar Despacho y Entrega | CDU-05 | Gestionar Despacho y Entrega | Sistema genera guía de envío, coordina con LogiExpress, cliente puede rastrear su paquete |
-| 6 | Gestionar Devoluciones | CDU-06 | Gestionar Devoluciones y Reembolsos | Sistema procesa devoluciones automáticamente, valida condiciones, devuelve dinero al cliente |
-| 7 | Atender al Cliente | CDU-07 | Atender al Cliente | Agente de call center puede crear compras, consultar estado, resolver problemas del cliente |
-| 8 | Conciliar Ventas con ERP | CDU-08 | Conciliar Ventas con ERP | Sistema envía automáticamente datos de ventas al sistema contable cada 30 minutos |
- 
-### 5.3 ¿Por Qué Esta Descomposición Es Importante?
- 
-Esta descomposición garantiza que:
- 
-**Nada queda sin especificar**: Cada proceso de negocio tiene su definición detallada en el sistema
- 
-**El equipo de desarrollo sabe qué hacer**: Los programadores tienen especificaciones claras de lo que deben construir
- 
-**Se puede probar**: Cada caso de uso puede ser probado para verificar que funciona correctamente
- 
-**Facilita mantenimiento**: Si algo falla, sabes exactamente en qué caso de uso buscar el problema
+- **9 pasos detallados** (más de los 5 componentes, porque incluye pago y entrega)
+- **5 actores involucrados** (cliente, operaciones, sistema, etc.)
+- **Precondiciones** (qué debe ser verdad ANTES de ejecutar)
+- **Postcondiciones** (qué cambia DESPUÉS de ejecutar)
+- **3 flujos alternativos** (qué pasa si falla algo, si el cliente cancela, etc.)
 
 ---
 
