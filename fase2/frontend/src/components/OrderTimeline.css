@@ -1,0 +1,116 @@
+.order-timeline-container {
+  position: relative;
+  padding: 1rem 0;
+}
+
+.timeline-line {
+  position: absolute;
+  top: 30px;
+  bottom: 30px;
+  left: 24px;
+  width: 3px;
+  background: var(--border-medium);
+  z-index: 1;
+}
+
+.timeline-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  position: relative;
+  z-index: 2;
+}
+
+.timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.step-node {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--bg-card-solid);
+  border: 2px solid var(--border-medium);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.timeline-step.completed .step-node {
+  background: var(--navy-primary);
+  border-color: var(--orange-primary);
+  color: var(--orange-primary);
+}
+
+.timeline-step.active .step-node {
+  background: var(--orange-gradient);
+  border-color: #ffffff;
+  color: #ffffff;
+  box-shadow: var(--orange-glow);
+  animation: pulseNode 2s infinite;
+}
+
+@keyframes pulseNode {
+  0% { box-shadow: 0 0 0 0 rgba(253, 108, 0, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(253, 108, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(253, 108, 0, 0); }
+}
+
+.step-content {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+}
+
+.timeline-step.active .step-content {
+  border-color: rgba(253, 108, 0, 0.4);
+  background: rgba(253, 108, 0, 0.06);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.step-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.timeline-step.active .step-title {
+  color: var(--orange-primary);
+}
+
+.active-pulse-badge {
+  background: var(--orange-gradient);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+}
+
+.step-desc {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.step-date {
+  display: inline-block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  font-weight: 500;
+}

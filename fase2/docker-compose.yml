@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sgologic-postgres
+    environment:
+      POSTGRES_DB: sgologic
+      POSTGRES_USER: sgologic
+      POSTGRES_PASSWORD: sgologic2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: sgologic-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: sgologic-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  frontend:
+    build: ./frontend
+    container_name: sgologic-frontend
+    ports:
+      - "3000:3000"
+
+volumes:
+  pg_data:
