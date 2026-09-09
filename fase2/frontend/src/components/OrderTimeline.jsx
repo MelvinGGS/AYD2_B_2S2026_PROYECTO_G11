@@ -1,6 +1,5 @@
 import React from 'react';
 import { CheckCircle2, Clock, PackageCheck, Truck, Home, Receipt } from 'lucide-react';
-import './OrderTimeline.css';
 
 export const OrderTimeline = ({ timeline = [] }) => {
   const getIcon = (estado) => {

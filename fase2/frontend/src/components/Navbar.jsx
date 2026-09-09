@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Search, User, LogOut, LayoutDashboard, Shield, Package, Store } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import './Navbar.css';
 
 export const Navbar = ({ hideSearch = false, hideLinks = false }) => {
   const { totalCount } = useCart();
