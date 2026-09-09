@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { ShoppingCart, Check, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import './ProductCard.css';
 
 export const ProductCard = ({ product }) => {
   const { addToCart } = useCart();

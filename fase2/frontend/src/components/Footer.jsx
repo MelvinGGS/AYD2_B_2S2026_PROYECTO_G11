@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Store, ShieldCheck, Heart } from 'lucide-react';
-import './Footer.css';
 
 export const Footer = () => {
   return (
