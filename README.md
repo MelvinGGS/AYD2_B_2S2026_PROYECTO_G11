@@ -1,53 +1,44 @@
-# Proyecto Fase 1 — Grupo 11
+# AYD2 — Segundo Semestre 2026 — Grupo 11
+## MegaStore SGO-Logic: Sistema de Gestión de Órdenes Omnicanal
 
-## Integrantes
-
-| Carné | Nombre |
-|---|---|
-| 202300712 | Melvin Geovanni García Sumalá |
-| 202300378 | Maria Fernanda Morales Lima |
-| 202000576 | Susana Paola González Contreras |
-| 202307272 | Bryan Alejandro Anona Paredes |
-| 202112109 | Carlos David de Leon Barrios |
+Repositorio oficial del Grupo 11 para el proyecto de Análisis y Diseño de Sistemas 2 (AYD2), Facultad de Ingeniería, Universidad de San Carlos de Guatemala.
 
 ---
 
-## Índice de Entregables
+## 👥 Integrantes del Grupo 11
 
-### Documento de Definición de Arquitectura (DDA)
-
-Documento Principal Consolidado: [Documento de Definición de Arquitectura (DDA)](DDA.md)
-
-Secciones del DDA:
-1. [Identificación del caso de negocio](CDU_NYS/identificacion-caso-negocio.md)
-2. [Listado de Stakeholders y preocupaciones arquitectónicas](Bases%20DDA/stakeholders-preocupaciones.md)
-3. [Características del sistema priorizadas](Contexto,%20Decisiones%20y%20Trazabilidad/caracteristicas-priorizadas.md)
-4. [Drivers Requisitos Funcionales](CDU_NYS/drivers-requisitos-funcionales.md)
-5. [Drivers de Calidad (Escenarios Atributos de Calidad - EAC)](Bases%20DDA/drivers-calidad.md)
-6. [Drivers de Restricción](Bases%20DDA/drivers-restriccion.md)
-7. [Matrices de Trazabilidad](Contexto,%20Decisiones%20y%20Trazabilidad/matrices-trazabilidad.md)
+| Carné | Nombre | Correo Institucional |
+|---|---|---|
+| **202300712** | Melvin Geovanni García Sumalá | 202300712@ingenieria.usac.edu.gt |
+| **202300378** | Maria Fernanda Morales Lima | 202300378@ingenieria.usac.edu.gt |
+| **202000576** | Susana Paola González Contreras | 202000576@ingenieria.usac.edu.gt |
+| **202307272** | Bryan Alejandro Anona Paredes | 202307272@ingenieria.usac.edu.gt |
+| **202112109** | Carlos David de Leon Barrios | 202112109@ingenieria.usac.edu.gt |
 
 ---
 
-### Diagramas Arquitectónicos
+## 📂 Fases del Proyecto
 
-1. [Diagrama de Contexto](Contexto,%20Decisiones%20y%20Trazabilidad/Contexto.png)
-2. [Diagrama de Componentes](Diagrama%20de%20arquitecturas/DiagramaDeComponentes.png)
-3. [Diagrama de Despliegue](Diagrama%20de%20arquitecturas/DiagramaDespliegue.jpg)
-4. [Diagrama de Bloques](Diagrama%20de%20arquitecturas/DiagramadeBloques.png)
-5. [Justificación de Decisiones Arquitectónicas (ADRs)](Contexto,%20Decisiones%20y%20Trazabilidad/justificacion-decisiones-arquitectonicas.md)
+### 📌 [Fase 1 — Documento de Definición de Arquitectura (DDA)](fase1/README.md)
+Contiene la justificación de decisiones arquitectónicas (ADRs), atributos de calidad (EAC), matriz de trazabilidad, diagramas C4 (contexto, componentes, despliegue, bloques) y mockups iniciales.
+- **Acceso:** 👉 [Ver entregables de la Fase 1](fase1/README.md)
 
 ---
 
-### Prototipo Arquitectónico
-
-1. [Mockups o prototipo de alto nivel](mockups.md)
-2. [Flujo principal del sistema](Bases%20DDA/flujo-principal.md)
+### 🚀 [Fase 2 — Implementación de Microservicios y MVP Operativo](fase2/README.md)
+Contiene el código fuente completo, contenedores Docker, microservicios en Java Spring Boot y C# .NET 8, frontend web reactivo en React 18, caché Redis, base de datos PostgreSQL y bus de eventos RabbitMQ.
+- **Guía de Replicación Rápida con Comandos Exactos:** 👉 [Ver Guía de Replicación de Fase 2](fase2/README.md)
 
 ---
 
-## Tablero Kanban
+## ⚡ Arranque Rápido de la Fase 2 (En 1 solo paso)
 
-Tablero Trello del Proyecto: [https://trello.com/b/skO2sFFI/ayd222](https://trello.com/b/skO2sFFI/ayd222)
+```bash
+# Entrar a la carpeta de la fase 2 y levantar todos los contenedores
+cd fase2 && docker compose up -d --build
+```
 
-![Tablero Kanban](Bases%20DDA/TableroKanban.png)
+- **Frontend SGO-Logic**: [http://localhost:3000](http://localhost:3000)
+- **Panel RabbitMQ**: [http://localhost:15672](http://localhost:15672) (guest / guest)
+- **API Órdenes (Java)**: [http://localhost:8081/api/ordenes](http://localhost:8081/api/ordenes)
+- **API Notificaciones (.NET 8)**: [http://localhost:8086/api/notificaciones/logs](http://localhost:8086/api/notificaciones/logs)
