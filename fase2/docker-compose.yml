@@ -1,7 +1,4 @@
 services:
-  # ============================================================================
-  # INFRAESTRUCTURA BASE - CARD 1 (Melvin #202300712)
-  # ============================================================================
   postgres:
     image: postgres:16
     container_name: sgologic-postgres
@@ -46,9 +43,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ============================================================================
-  # SERVICIOS ASIGNADOS A LA CARD 1 (Melvin #202300712)
-  # ============================================================================
   ordenes-service:
     build: ./ordenes-service
     container_name: sgologic-ordenes
@@ -89,79 +83,6 @@ services:
       - "3000:3000"
     depends_on:
       - ordenes-service
-
-  # ============================================================================
-  # SERVICIOS DE LAS CARDS 2, 3, 4 Y 5
-  # (Cada integrante debe descomentar e integrar su servicio al finalizar su feature)
-  # ============================================================================
-  # Card 2 - Integrante Responsable de Inventario:
-  # inventario-service:
-  #   build: ./inventario-service
-  #   container_name: sgologic-inventario
-  #   environment:
-  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
-  #     SPRING_DATASOURCE_USERNAME: sgologic
-  #     SPRING_DATASOURCE_PASSWORD: sgologic2026
-  #     SPRING_RABBITMQ_HOST: rabbitmq
-  #     SPRING_RABBITMQ_PORT: 5672
-  #   ports:
-  #     - "8082:8082"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-
-  # Card 3 - Integrante Responsable de Pagos:
-  # pagos-service:
-  #   build: ./pagos-service
-  #   container_name: sgologic-pagos
-  #   environment:
-  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
-  #     SPRING_DATASOURCE_USERNAME: sgologic
-  #     SPRING_DATASOURCE_PASSWORD: sgologic2026
-  #     SPRING_RABBITMQ_HOST: rabbitmq
-  #     SPRING_RABBITMQ_PORT: 5672
-  #   ports:
-  #     - "8083:8083"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-
-  # Card 4 - Integrante Responsable de Facturación:
-  # facturacion-service:
-  #   build: ./facturacion-service
-  #   container_name: sgologic-facturacion
-  #   environment:
-  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
-  #     SPRING_DATASOURCE_USERNAME: sgologic
-  #     SPRING_DATASOURCE_PASSWORD: sgologic2026
-  #     SPRING_RABBITMQ_HOST: rabbitmq
-  #     SPRING_RABBITMQ_PORT: 5672
-  #   ports:
-  #     - "8084:8084"
-  #   volumes:
-  #     - facturas_data:/app/uploads
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-
-  # Card 5 - Integrante Responsable de Logística:
-  # logistica-service:
-  #   build: ./logistica-service
-  #   container_name: sgologic-logistica
-  #   environment:
-  #     RabbitMQ__Host: rabbitmq
-  #     RabbitMQ__Port: 5672
-  #   ports:
-  #     - "8085:8085"
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
 
 volumes:
   pg_data:
