@@ -4,7 +4,6 @@ import { CheckCircle2, Info, ArrowRight, Store, Calendar, ShieldCheck, Truck } f
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { getOrden } from '../services/api';
-import '../styles/ConfirmacionPage.css';
 
 export const ConfirmacionPage = () => {
   const { ordenId } = useParams();

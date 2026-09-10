@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { getDashboardMetrics } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import '../styles/DashboardPage.css';
 
 export const DashboardPage = () => {
   const [metrics, setMetrics] = useState(null);

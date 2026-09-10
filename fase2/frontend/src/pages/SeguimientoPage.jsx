@@ -5,7 +5,6 @@ import { Navbar } from '../components/Navbar';
 import { OrderTimeline } from '../components/OrderTimeline';
 import { Footer } from '../components/Footer';
 import { getOrden } from '../services/api';
-import '../styles/SeguimientoPage.css';
 
 export const SeguimientoPage = () => {
   const { ordenId } = useParams();

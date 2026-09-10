@@ -5,7 +5,6 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
 import { crearOrden } from '../services/api';
-import '../styles/CheckoutPage.css';
 
 export const CheckoutPage = () => {
   const { cartItems, subtotal, clearCart } = useCart();

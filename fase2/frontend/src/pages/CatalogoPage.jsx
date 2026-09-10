@@ -5,7 +5,6 @@ import { Navbar } from '../components/Navbar';
 import { ProductCard } from '../components/ProductCard';
 import { Footer } from '../components/Footer';
 import { getProductos } from '../services/api';
-import '../styles/CatalogoPage.css';
 
 export const CatalogoPage = () => {
   const [searchParams] = useSearchParams();
