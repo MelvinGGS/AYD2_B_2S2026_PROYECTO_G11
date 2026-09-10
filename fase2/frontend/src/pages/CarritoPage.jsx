@@ -5,7 +5,6 @@ import { Navbar } from '../components/Navbar';
 import { CartItem } from '../components/CartItem';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
-import '../styles/CarritoPage.css';
 
 export const CarritoPage = () => {
   const { cartItems, totalCount, subtotal } = useCart();

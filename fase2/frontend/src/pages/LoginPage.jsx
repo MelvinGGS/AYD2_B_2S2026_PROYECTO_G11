@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, LogIn, Store, ShieldCheck, UserCheck, Headphones, UserPlus, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import '../styles/LoginPage.css';
 
 export const LoginPage = () => {
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
