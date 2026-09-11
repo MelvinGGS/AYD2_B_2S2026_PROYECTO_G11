@@ -1,0 +1,31 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: facturacion-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/sgologic}
+    username: ${SPRING_DATASOURCE_USERNAME:sgologic}
+    password: ${SPRING_DATASOURCE_PASSWORD:sgologic2026}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
+app:
+  uploads-dir: uploads
+  rabbitmq:
+    exchange: sgologic.exchange
+    queue-facturacion: facturacion.queue
+    queue-dlq: facturacion.dlq
+    routing-key-factura-emitida: factura.emitida
