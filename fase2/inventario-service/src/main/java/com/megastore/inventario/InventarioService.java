@@ -16,6 +16,7 @@ import java.util.Map;
 public class InventarioService {
 
     private final ReservaRepository reservaRepository;
+    private final StockRepository stockRepository;
     private final RabbitTemplate rabbitTemplate;
 
     @Value("${app.rabbitmq.exchange:sgologic.exchange}")
@@ -23,9 +24,13 @@ public class InventarioService {
 
     @Value("${app.rabbitmq.routing-key-inventario-reservado:inventario.reservado}")
     private String routingKeyReservado;
+    
+    @Value("${app.rabbitmq.routing-key-inventario-insuficiente:inventario.insuficiente}")
+    private String routingKeyInsuficiente;
 
-    public InventarioService(ReservaRepository reservaRepository, RabbitTemplate rabbitTemplate) {
+    public InventarioService(ReservaRepository reservaRepository, StockRepository stockRepository, RabbitTemplate rabbitTemplate) {
         this.reservaRepository = reservaRepository;
+        this.stockRepository = stockRepository;
         this.rabbitTemplate = rabbitTemplate;
     }
 
@@ -34,26 +39,55 @@ public class InventarioService {
     public void procesarOrdenCreada(Map<String, Object> ordenData) {
         try {
             String ordenId = (String) ordenData.get("id");
-            System.out.println("[INVENTARIO LISTENER] Procesando reserva temporal para Orden: " + ordenId);
+            // Se asume que el MS de Órdenes manda un productoId y la cantidad requerida en el evento
+            String productoId = ordenData.getOrDefault("productoId", "PROD-001").toString();
+            Integer cantidadSolicitada = Integer.parseInt(ordenData.getOrDefault("cantidad", "1").toString());
+            
+            System.out.println("[INVENTARIO LISTENER] Procesando Orden: " + ordenId + " | Producto: " + productoId + " | Cantidad: " + cantidadSolicitada);
 
-            // Registrar reserva temporal con bloqueo de 15 minutos
-            Reserva reserva = new Reserva(ordenId, "prod-general", "CD_NORTE", 1);
-            reservaRepository.save(reserva);
+            // 1. Calcular stock total real del producto en todas las ubicaciones
+            Integer stockTotal = stockRepository.findByProductoId(productoId)
+                                                .stream()
+                                                .mapToInt(Stock::getCantidad)
+                                                .sum();
+                                                
+            // 2. Calcular cuántas unidades ya están reservadas (por otras órdenes)
+            Integer stockReservado = reservaRepository.findByProductoIdAndActivaTrue(productoId)
+                                                      .stream()
+                                                      .mapToInt(Reserva::getCantidad)
+                                                      .sum();
 
-            // Publicar evento al bus RabbitMQ
-            Map<String, Object> evento = new HashMap<>();
-            evento.put("ordenId", ordenId);
-            evento.put("estado", "INVENTARIO_RESERVADO");
-            evento.put("fecha", LocalDateTime.now().toString());
+            int stockDisponible = stockTotal - stockReservado;
 
-            rabbitTemplate.convertAndSend(exchangeName, routingKeyReservado, evento);
-            System.out.println("[INVENTARIO] Stock reservado (15 min) y evento publicado para orden: " + ordenId);
+            Map<String, Object> eventoRespuesta = new HashMap<>();
+            eventoRespuesta.put("ordenId", ordenId);
+            eventoRespuesta.put("fecha", LocalDateTime.now().toString());
+
+            // 3. Regla de Negocio Crítica: ¿Alcanza el inventario?
+            if (stockDisponible >= cantidadSolicitada) {
+                // Registrar reserva temporal con bloqueo de 15 minutos (asignamos CD_NORTE temporalmente por el MVP)
+                Reserva reserva = new Reserva(ordenId, productoId, "CD_NORTE", cantidadSolicitada);
+                reservaRepository.save(reserva);
+
+                eventoRespuesta.put("estado", "INVENTARIO_RESERVADO");
+                rabbitTemplate.convertAndSend(exchangeName, routingKeyReservado, eventoRespuesta);
+                
+                System.out.println("✅ [INVENTARIO] ÉXITO: Stock reservado (15 min). Evento 'inventario.reservado' publicado.");
+            } else {
+                // No hay suficiente inventario disponible
+                eventoRespuesta.put("estado", "INVENTARIO_INSUFICIENTE");
+                eventoRespuesta.put("motivo", "Stock insuficiente. Solicitado: " + cantidadSolicitada + " | Disponible real: " + stockDisponible);
+                
+                rabbitTemplate.convertAndSend(exchangeName, routingKeyInsuficiente, eventoRespuesta);
+                System.out.println("❌ [INVENTARIO] FALLO: Stock insuficiente. Evento 'inventario.insuficiente' publicado.");
+            }
+            
         } catch (Exception e) {
             System.err.println("Error procesando reserva de inventario: " + e.getMessage());
         }
     }
 
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedRate = 60000) // Se ejecuta cada minuto
     @Transactional
     public void liberarReservasExpiradas() {
         LocalDateTime now = LocalDateTime.now();
@@ -62,7 +96,7 @@ public class InventarioService {
         for (Reserva r : expiradas) {
             r.setActiva(false);
             reservaRepository.save(r);
-            System.out.println("[EXPIRACIÓN RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada para orden " + r.getOrdenId());
+            System.out.println("⏳ [EXPIRACIÓN RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada para orden " + r.getOrdenId());
         }
     }
 }
