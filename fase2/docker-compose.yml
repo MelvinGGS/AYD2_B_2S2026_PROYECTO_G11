@@ -8,7 +8,25 @@ services:
       POSTGRES_PASSWORD: sgologic2026
     ports:
       - "5432:5432"
-    volumes:
+    
+  inventario-service:
+    build: ./inventario-service
+    container_name: sgologic-inventario
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
+      SPRING_DATASOURCE_USERNAME: sgologic
+      SPRING_DATASOURCE_PASSWORD: sgologic2026
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sgologic -d sgologic"]
@@ -84,9 +102,6 @@ services:
     depends_on:
       - ordenes-service
 
-volumes:
-  pg_data:
-  facturas_data:
 
   inventario-service:
     build: ./inventario-service
@@ -104,3 +119,7 @@ volumes:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+
+volumes:
+  pg_data:
+  facturas_data:
