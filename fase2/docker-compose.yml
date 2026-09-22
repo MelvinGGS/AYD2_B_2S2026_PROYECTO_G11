@@ -63,6 +63,24 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+  facturacion-service:
+    build: ./facturacion-service
+    container_name: sgologic-facturacion
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
+      SPRING_DATASOURCE_USERNAME: sgologic
+      SPRING_DATASOURCE_PASSWORD: sgologic2026
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - facturas_data:/app/uploads
 
   notificaciones-service:
     build: ./notificaciones-service
