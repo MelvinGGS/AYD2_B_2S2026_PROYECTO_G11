@@ -39,12 +39,14 @@ public class InventarioController {
         }
 
         // Mapeamos a un formato estructurado desglosado por tienda/CD
-        List<Map<String, Object>> response = stockList.stream().map(stock -> Map.of(
-            "ubicacionId", stock.getUbicacion().getId(),
-            "nombreUbicacion", stock.getUbicacion().getNombre(),
-            "tipoUbicacion", stock.getUbicacion().getTipo(),
-            "cantidadDisponible", stock.getCantidad()
-        )).collect(Collectors.toList());
+        List<Map<String, Object>> response = stockList.stream().map(stock -> {
+            Map<String, Object> map = new java.util.HashMap<>();
+            map.put("ubicacionId", stock.getUbicacion().getId());
+            map.put("nombreUbicacion", stock.getUbicacion().getNombre());
+            map.put("tipoUbicacion", stock.getUbicacion().getTipo());
+            map.put("cantidadDisponible", stock.getCantidad());
+            return map;
+        }).collect(Collectors.toList());
 
         return ResponseEntity.ok(response);
     }
