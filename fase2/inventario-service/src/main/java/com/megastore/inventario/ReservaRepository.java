@@ -6,4 +6,5 @@ import java.util.List;
 public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     List<Reserva> findByOrdenIdAndActivaTrue(String ordenId);
     List<Reserva> findByActivaTrueAndFechaExpiracionBefore(LocalDateTime now);
+    List<Reserva> findByProductoIdAndActivaTrue(String productoId);
 }
