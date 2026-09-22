@@ -23,9 +23,13 @@ public class RabbitMQConfig {
         return new TopicExchange(exchangeName, true, false);
     }
 
+    // Configuración para que si falla un mensaje, vaya directo al DLQ
     @Bean
     public Queue facturacionQueue() {
-        return new Queue(queueFacturacion, true);
+        return QueueBuilder.durable(queueFacturacion)
+                .withArgument("x-dead-letter-exchange", "")
+                .withArgument("x-dead-letter-routing-key", dlqQueue)
+                .build();
     }
 
     @Bean
