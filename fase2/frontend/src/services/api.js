@@ -140,7 +140,33 @@ const MOCK_ORDERS = [
   }
 ];
 
+const INVENTARIO_API = process.env.REACT_APP_INVENTARIO_API || 'http://localhost:8082/api/inventario';
+
 export const getProductos = async (query = '', categoria = '') => {
+  try {
+    let url = `${INVENTARIO_API}/productos`;
+    if (categoria && categoria !== 'Todas') {
+      url += `?categoria=${encodeURIComponent(categoria)}`;
+    }
+    
+    const res = await fetch(url);
+    if (res.ok) {
+      let data = await res.json();
+      // Como nuestro backend aún no filtra por query de texto, lo hacemos en frontend
+      if (query.trim()) {
+        const q = query.toLowerCase();
+        // Fallback p.descripcion si no viene del backend, por compatibilidad con el mock
+        data = data.filter(p => 
+          p.nombre.toLowerCase().includes(q) || 
+          (p.descripcion && p.descripcion.toLowerCase().includes(q))
+        );
+      }
+      return data;
+    }
+  } catch (e) {
+    console.warn('Backend Inventario offline, utilizando catálogo mock...');
+  }
+
   let result = [...INITIAL_PRODUCTS];
   if (categoria && categoria !== 'Todas') {
     result = result.filter(p => p.categoria.toLowerCase() === categoria.toLowerCase());
