@@ -4,6 +4,7 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ public class PagosService {
 
     private final IntentoPagoRepository intentoPagoRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final RestTemplate restTemplate;
 
     @Value("${app.rabbitmq.exchange:sgologic.exchange}")
     private String exchangeName;
@@ -26,16 +28,27 @@ public class PagosService {
     @Value("${app.rabbitmq.routing-key-pago-confirmado:pago.confirmado}")
     private String routingKeyConfirmado;
 
-    public PagosService(IntentoPagoRepository intentoPagoRepository, RabbitTemplate rabbitTemplate) {
+    public PagosService(IntentoPagoRepository intentoPagoRepository, RabbitTemplate rabbitTemplate, RestTemplate restTemplate) {
         this.intentoPagoRepository = intentoPagoRepository;
         this.rabbitTemplate = rabbitTemplate;
+        this.restTemplate = restTemplate;
     }
 
     @CircuitBreaker(name = "payklikService", fallbackMethod = "encolarPagoFallback")
     public IntentoPago procesarPagoConCircuitBreaker(String ordenId, BigDecimal monto, String canal, String numeroTarjeta) {
         System.out.println("[PAYKLIK] Procesando transacción para Orden: " + ordenId);
 
-        String refPayklik = "PK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        Map<String, Object> request = new HashMap<>();
+        request.put("ordenId", ordenId);
+        request.put("monto", monto);
+        request.put("numeroTarjeta", numeroTarjeta);
+        
+        // Llamada REST real al mock (Si tarda más de 5s o da 500, saltará al Fallback automáticamente)
+        Map respuesta = restTemplate.postForObject("http://localhost:8083/mock/payklik/cobrar", request, Map.class);
+
+        String refPayklik = respuesta != null && respuesta.get("referencia") != null 
+                ? respuesta.get("referencia").toString() 
+                : "PK-UNKNOWN";
 
         // Cumplimiento PCI-DSS: Solo últimos 4 dígitos
         String ultimosCuatro = (numeroTarjeta != null && numeroTarjeta.length() >= 4) 
