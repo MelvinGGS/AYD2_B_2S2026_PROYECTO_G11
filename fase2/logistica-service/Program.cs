@@ -18,7 +18,8 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddScoped<LogisticaManagerService>();
-
+//para los mocklogi
+builder.Services.AddScoped<MockLogiExpressService>();
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
