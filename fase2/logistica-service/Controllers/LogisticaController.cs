@@ -1,4 +1,5 @@
 using LogisticaService.Data;
+using LogisticaService.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,11 +11,13 @@ namespace LogisticaService.Controllers
     {
         private readonly LogisticaDbContext _dbContext;
         private readonly ILogger<LogisticaController> _logger;
+        private readonly MockLogiExpressService _mockLogiExpress;
 
-        public LogisticaController(LogisticaDbContext dbContext, ILogger<LogisticaController> logger)
+        public LogisticaController(LogisticaDbContext dbContext, ILogger<LogisticaController> logger, MockLogiExpressService mockLogiExpress)
         {
             _dbContext = dbContext;
             _logger = logger;
+            _mockLogiExpress = mockLogiExpress;
         }
 
         [HttpPost("despacho")]
@@ -144,6 +147,41 @@ namespace LogisticaService.Controllers
             }
         }
 
+        [HttpPost("mock/logiexpress/guia")]
+        public async Task<ActionResult<CrearGuiaResponse>> CrearGuiaMockLogiExpress([FromBody] CrearGuiaRequest request)
+        {
+            try
+            {
+                var response = await _mockLogiExpress.CrearGuia(request);
+                return Ok(response);
+            }
+            catch (TimeoutException ex)
+            {
+                _logger.LogError($"Timeout en LogiExpress: {ex.Message}");
+                return StatusCode(504, new { error = "LogiExpress timeout", detalles = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error en mock LogiExpress: {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("mock/logiexpress/rastreo/{numeroGuia}")]
+        public async Task<ActionResult<RastreoLogiExpressResponse>> ObtenerRastreoMockLogiExpress(string numeroGuia)
+        {
+            try
+            {
+                var response = await _mockLogiExpress.ObtenerRastreo(numeroGuia);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error al obtener rastreo mock: {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
         private string GenerarCodigoRastreo()
         {
             return "TRACK-" + DateTime.UtcNow.Ticks.ToString().Substring(0, 10) + "-" + Random.Shared.Next(1000, 9999);
@@ -160,5 +198,27 @@ namespace LogisticaService.Controllers
     {
         public string NuevoEstado { get; set; } = string.Empty;
         public string? UbicacionActual { get; set; }
+    }
+
+    public class CrearGuiaRequest
+    {
+        public string Remitente { get; set; } = string.Empty;
+        public string Destinatario { get; set; } = string.Empty;
+        public string Direccion { get; set; } = string.Empty;
+    }
+
+    public class CrearGuiaResponse
+    {
+        public string NumeroGuia { get; set; } = string.Empty;
+        public string Estado { get; set; } = string.Empty;
+        public DateTime FechaCreacion { get; set; }
+    }
+
+    public class RastreoLogiExpressResponse
+    {
+        public string NumeroGuia { get; set; } = string.Empty;
+        public string Estado { get; set; } = string.Empty;
+        public string UbicacionActual { get; set; } = string.Empty;
+        public DateTime UltimaActualizacion { get; set; }
     }
 }
