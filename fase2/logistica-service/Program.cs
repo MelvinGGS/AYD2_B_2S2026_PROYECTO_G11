@@ -4,6 +4,7 @@ using LogisticaService.Services;
 using LogisticaService.Consumers;
 using Microsoft.EntityFrameworkCore;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
