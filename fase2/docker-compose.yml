@@ -136,6 +136,22 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+  logistica-service:
+    build: ./logistica-service
+    container_name: sgologic-logistica
+    environment:
+      ConnectionStrings__PostgreSQL: "Host=postgres;Port=5432;Database=sgologic;Username=sgologic;Password=sgologic2026"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: guest
+      RabbitMQ__Password: guest
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   pg_data:
