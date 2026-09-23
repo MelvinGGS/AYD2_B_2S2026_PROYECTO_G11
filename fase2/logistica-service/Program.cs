@@ -1,5 +1,7 @@
 using LogisticaService;
 using LogisticaService.Data;
+using LogisticaService.Services;
+using LogisticaService.Consumers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +22,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<LogisticaManagerService>();
 //para los mocklogi
 builder.Services.AddScoped<MockLogiExpressService>();
+builder.Services.AddHostedService<DespachoSolicitadoConsumer>();
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
