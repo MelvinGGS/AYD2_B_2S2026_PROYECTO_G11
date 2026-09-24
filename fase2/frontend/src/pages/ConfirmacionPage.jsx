@@ -14,12 +14,26 @@ export const ConfirmacionPage = () => {
   useEffect(() => {
     const fetchOrderData = async () => {
       setLoading(true);
-      const data = await getOrden(ordenId || 'ORD-2026-08941');
-      setOrden(data);
-      setLoading(false);
+      try {
+        const targetId = ordenId || localStorage.getItem('lastOrder');
+        if (targetId) {
+          const data = await getOrden(targetId);
+          setOrden(data);
+        }
+      } catch (err) {
+        console.warn('Error al cargar orden en confirmacion:', err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchOrderData();
   }, [ordenId]);
+
+  const getEstimatedDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
 
   return (
     <div className="app-container">
@@ -50,9 +64,9 @@ export const ConfirmacionPage = () => {
 
             {/* Title & Order ID */}
             <div className="confirmacion-header-text">
-              <h1 className="confirmacion-title">¡Orden confirmada!</h1>
+              <h1 className="confirmacion-title">Orden confirmada exitosamente</h1>
               <p className="order-number-text">
-                Número de orden: <span className="order-number-highlight">#{orden?.id}</span>
+                Número de orden: <span className="order-number-highlight">#{orden?.id || 'PROCESANDO'}</span>
               </p>
             </div>
 
@@ -62,7 +76,7 @@ export const ConfirmacionPage = () => {
               <div>
                 <h4 className="banner-heading">Procesando transmisión omnicanal</h4>
                 <p className="banner-subtext">
-                  Tu orden ha sido registrada en SGO-Logic. Facturación electrónica enviada a SAT.
+                  Tu orden ha sido registrada en SGO-Logic. Facturación electrónica emitida y despacho en curso.
                 </p>
               </div>
             </div>
@@ -73,21 +87,21 @@ export const ConfirmacionPage = () => {
               
               <div className="summary-rows-group">
                 <div className="summary-line">
-                  <span>Productos ({orden?.items?.length || 1})</span>
-                  <span>${orden?.subtotal ? orden.subtotal.toFixed(2) : '319.49'}</span>
+                  <span>Productos ({orden?.items?.length || 0})</span>
+                  <span>${orden?.subtotal ? Number(orden.subtotal).toFixed(2) : '0.00'}</span>
                 </div>
                 <div className="summary-line">
-                  <span>Envío ({orden?.metodoEntrega || 'Express'})</span>
-                  <span>{orden?.envio === 0 ? 'Gratis' : `$${orden?.envio?.toFixed(2) || '15.00'}`}</span>
+                  <span>Envío ({orden?.metodoEntrega || 'Envio a Domicilio'})</span>
+                  <span>{orden?.envio === 0 ? 'Gratis' : `$${(Number(orden?.envio) || 0).toFixed(2)}`}</span>
                 </div>
                 <div className="summary-line">
                   <span>Método de pago</span>
-                  <span>{orden?.metodoPago || 'PayKlik (Tarjeta **** 4242)'}</span>
+                  <span>{orden?.metodoPago || 'PayKlik'}</span>
                 </div>
                 
                 <div className="summary-line total-line">
                   <span>Total pagado</span>
-                  <span className="total-highlight">${orden?.total ? orden.total.toFixed(2) : '357.83'}</span>
+                  <span className="total-highlight">${orden?.total ? Number(orden.total).toFixed(2) : '0.00'}</span>
                 </div>
               </div>
             </div>
@@ -95,13 +109,13 @@ export const ConfirmacionPage = () => {
             {/* Estimated Delivery Widget */}
             <div className="delivery-estimate-card">
               <Calendar size={20} className="icon-orange" />
-              <span>Entrega estimada: <strong>Mañana, 26-28 ago 2026</strong></span>
+              <span>Entrega estimada: <strong>{getEstimatedDate()}</strong></span>
             </div>
 
             {/* Action Buttons */}
             <div className="confirmacion-actions">
               <button
-                onClick={() => navigate(`/seguimiento/${orden?.id}`)}
+                onClick={() => navigate(orden?.id ? `/seguimiento/${orden.id}` : '/seguimiento')}
                 className="btn-primary flex-1-btn"
               >
                 <span>Ver estado de mi orden</span>

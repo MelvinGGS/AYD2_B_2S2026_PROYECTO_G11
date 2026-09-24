@@ -1,8 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Store, ShieldCheck, Heart } from 'lucide-react';
+import { Store, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const Footer = () => {
+  const { user } = useAuth();
+
   return (
     <footer className="footer-container">
       <div className="footer-content">
@@ -21,9 +24,15 @@ export const Footer = () => {
         <div className="footer-links">
           <Link to="/catalogo">Catálogo</Link>
           <Link to="/carrito">Mi Carrito</Link>
-          <Link to="/seguimiento/ORD-2026-08941">Seguimiento</Link>
-          <Link to="/login">Iniciar Sesión</Link>
-          <Link to="/admin/dashboard">Ops Dashboard</Link>
+          <Link to="/seguimiento">Seguimiento</Link>
+          {!user ? (
+            <Link to="/login">Iniciar Sesión</Link>
+          ) : (
+            <Link to="/catalogo">Mi Cuenta</Link>
+          )}
+          {user?.role === 'admin' && (
+            <Link to="/admin/dashboard">Ops Dashboard</Link>
+          )}
         </div>
 
         {/* Copyright */}

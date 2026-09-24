@@ -8,27 +8,7 @@ export const CartProvider = ({ children }) => {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { return []; }
     }
-    // Default initial mock cart items matching Orange Mockup
-    return [
-      {
-        id: 'prod-004',
-        nombre: 'Smartwatch Deportivo V3 Pro AMOLED',
-        descripcion: 'Color: Negro Profundo',
-        precio: 189.99,
-        cantidad: 1,
-        imagen: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=600&q=80',
-        stockStatus: 'En stock'
-      },
-      {
-        id: 'prod-005',
-        nombre: 'Auriculares Inalámbricos Noise Cancelling Pro',
-        descripcion: 'Color: Blanco Nube',
-        precio: 129.50,
-        cantidad: 1,
-        imagen: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
-        stockStatus: 'Últimas unidades'
-      }
-    ];
+    return [];
   });
 
   useEffect(() => {
