@@ -34,6 +34,8 @@ resilience4j:
         automaticTransitionFromOpenToHalfOpenEnabled: true
 
 app:
+  payklik:
+    url: ${APP_PAYKLIK_URL:http://localhost:8083/api/payklik/cobrar}
   rabbitmq:
     exchange: sgologic.exchange
     queue-pago: pagos.queue
