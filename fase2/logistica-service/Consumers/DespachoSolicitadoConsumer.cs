@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using LogisticaService.Data;
 using LogisticaService.Services;
+using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -10,134 +11,141 @@ namespace LogisticaService.Consumers
     public class DespachoSolicitadoConsumer : BackgroundService
     {
         private readonly ILogger<DespachoSolicitadoConsumer> _logger;
-        private readonly LogisticaDbContext _dbContext;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly MockLogiExpressService _mockLogiExpress;
+        private readonly IConfiguration _configuration;
         private IConnection? _connection;
-        private IChannel? _channel;
-        private readonly string _rabbitMqHost;
-        private readonly int _rabbitMqPort;
-        private readonly string _rabbitMqUsername;
-        private readonly string _rabbitMqPassword;
+        private IModel? _channel;
 
         public DespachoSolicitadoConsumer(
             ILogger<DespachoSolicitadoConsumer> logger,
-            LogisticaDbContext dbContext,
+            IServiceScopeFactory scopeFactory,
             MockLogiExpressService mockLogiExpress,
             IConfiguration configuration)
         {
             _logger = logger;
-            _dbContext = dbContext;
+            _scopeFactory = scopeFactory;
             _mockLogiExpress = mockLogiExpress;
-            _rabbitMqHost = configuration["RabbitMQ:Host"] ?? "localhost";
-            _rabbitMqPort = int.Parse(configuration["RabbitMQ:Port"] ?? "5672");
-            _rabbitMqUsername = configuration["RabbitMQ:Username"] ?? "guest";
-            _rabbitMqPassword = configuration["RabbitMQ:Password"] ?? "guest";
+            _configuration = configuration;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await ConectarRabbitMQ(stoppingToken);
-        }
+            await Task.Yield();
 
-        private async Task ConectarRabbitMQ(CancellationToken stoppingToken)
-        {
-            try
+            var host = _configuration["RabbitMQ:Host"] ?? "localhost";
+            var port = int.Parse(_configuration["RabbitMQ:Port"] ?? "5672");
+            var username = _configuration["RabbitMQ:Username"] ?? "guest";
+            var password = _configuration["RabbitMQ:Password"] ?? "guest";
+            var exchange = "sgologic.exchange";
+            var queue = "logistica.despacho.solicitado";
+            var dlq = "logistica.dlq";
+            var routingKey = "despacho.solicitado";
+
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var factory = new ConnectionFactory
+                try
                 {
-                    HostName = _rabbitMqHost,
-                    Port = _rabbitMqPort,
-                    UserName = _rabbitMqUsername,
-                    Password = _rabbitMqPassword,
-                    DispatchConsumersAsync = true,
-                    AutomaticRecoveryEnabled = true,
-                    NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
-                };
+                    var factory = new ConnectionFactory
+                    {
+                        HostName = host,
+                        Port = port,
+                        UserName = username,
+                        Password = password,
+                        AutomaticRecoveryEnabled = true,
+                        NetworkRecoveryInterval = TimeSpan.FromSeconds(10)
+                    };
 
-                _connection = await factory.CreateConnectionAsync(stoppingToken);
-                _channel = await _connection.CreateChannelAsync(cancellationToken: stoppingToken);
+                    _connection = factory.CreateConnection();
+                    _channel = _connection.CreateModel();
 
-                var exchange = "sgologic.exchange";
-                var queue = "logistica.despacho.solicitado";
-                var dlq = "logistica.dlq";
-                var routingKey = "despacho.solicitado";
+                    _channel.ExchangeDeclare(exchange: exchange, type: ExchangeType.Topic, durable: true);
+                    _channel.QueueDeclare(queue: queue, durable: true, exclusive: false, autoDelete: false);
+                    _channel.QueueDeclare(queue: dlq, durable: true, exclusive: false, autoDelete: false);
+                    _channel.QueueBind(queue: queue, exchange: exchange, routingKey: routingKey);
 
-                await _channel.ExchangeDeclareAsync(exchange, "topic", durable: true, autoDelete: false, cancellationToken: stoppingToken);
-                await _channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
-                await _channel.QueueDeclareAsync(dlq, durable: true, exclusive: false, autoDelete: false, cancellationToken: stoppingToken);
-                await _channel.QueueBindAsync(queue, exchange, routingKey, cancellationToken: stoppingToken);
+                    var consumer = new EventingBasicConsumer(_channel);
+                    consumer.Received += async (model, ea) =>
+                    {
+                        await ProcessarMensaje(ea);
+                    };
 
-                var consumer = new AsyncEventingBasicConsumer(_channel);
-                consumer.ReceivedAsync += async (model, ea) =>
+                    _channel.BasicConsume(queue: queue, autoAck: false, consumer: consumer);
+                    _logger.LogInformation("DespachoSolicitadoConsumer conectado y escuchando en {Queue}", queue);
+                    break;
+                }
+                catch (Exception ex)
                 {
-                    await ProcessarMensaje(ea, stoppingToken);
-                };
-
-                await _channel.BasicConsumeAsync(queue, false, "", false, false, consumerTagArguments: null, consumer, stoppingToken);
-
-                _logger.LogInformation("DespachoSolicitadoConsumer conectado y escuchando");
-
-                while (!stoppingToken.IsCancellationRequested)
-                {
-                    await Task.Delay(1000, stoppingToken);
+                    _logger.LogWarning("Esperando conexión con RabbitMQ para Logística... ({Message})", ex.Message);
+                    await Task.Delay(5000, stoppingToken);
                 }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error en DespachoSolicitadoConsumer: {ex.Message}");
-                await Task.Delay(5000);
-                await ConectarRabbitMQ(stoppingToken);
-            }
         }
 
-        private async Task ProcessarMensaje(BasicDeliverEventArgs ea, CancellationToken stoppingToken)
+        private async Task ProcessarMensaje(BasicDeliverEventArgs ea)
         {
             try
             {
                 var message = Encoding.UTF8.GetString(ea.Body.ToArray());
-                _logger.LogInformation($"Mensaje recibido: {message}");
+                _logger.LogInformation("Mensaje recibido en Logistica: {Message}", message);
 
                 using var doc = JsonDocument.Parse(message);
                 var root = doc.RootElement;
-                
-                var ordenId = root.GetProperty("ordenId").GetString();
-                var direccion = root.GetProperty("direccionDestino").GetString();
+
+                var ordenId = root.TryGetProperty("ordenId", out var ordenProp) ? ordenProp.GetString() : Guid.NewGuid().ToString();
+                var direccion = root.TryGetProperty("direccionDestino", out var dirProp) ? dirProp.GetString() : "Ciudad de Guatemala";
+
+                var origen = LogisticaManagerService.DeterminarOrigenOptimo(direccion ?? "Ciudad de Guatemala");
+                var codigoRastreo = "TRACK-" + DateTime.UtcNow.Ticks.ToString().Substring(0, 10) + "-" + Random.Shared.Next(1000, 9999);
 
                 var despacho = new Despacho
                 {
                     Id = Guid.NewGuid().ToString(),
-                    OrdenId = ordenId,
-                    DireccionDestino = direccion,
-                    UbicacionOrigen = LogisticaManagerService.DeterminarOrigenOptimo(direccion),
-                    CodigoRastreo = "TRACK-" + DateTime.UtcNow.Ticks.ToString().Substring(0, 10),
+                    OrdenId = ordenId ?? "ORD-UNKNOWN",
+                    DireccionDestino = direccion ?? "Ciudad de Guatemala",
+                    UbicacionOrigen = origen,
+                    CodigoRastreo = codigoRastreo,
                     Estado = "PENDIENTE",
                     FechaCreacion = DateTime.UtcNow
                 };
 
-                _dbContext.Despachos.Add(despacho);
-                await _dbContext.SaveChangesAsync(stoppingToken);
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var dbContext = scope.ServiceProvider.GetRequiredService<LogisticaDbContext>();
+                    dbContext.Despachos.Add(despacho);
 
-                _logger.LogInformation($"Despacho procesado: {despacho.Id}");
-                await _channel!.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
+                    var rastreo = new Rastreo
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        CodigoRastreo = codigoRastreo,
+                        Estado = "PENDIENTE",
+                        UbicacionActual = origen,
+                        Timestamp = DateTime.UtcNow
+                    };
+                    dbContext.Rastreos.Add(rastreo);
+
+                    await dbContext.SaveChangesAsync();
+                }
+
+                _logger.LogInformation("Despacho creado exitosamente: {Id} con guia {Guia}", despacho.Id, codigoRastreo);
+                _channel?.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error procesando mensaje: {ex.Message}");
-                if (_channel != null)
+                _logger.LogError("Error procesando mensaje en Logistica: {Message}", ex.Message);
+                try
                 {
-                    await _channel.BasicNackAsync(ea.DeliveryTag, false, true, stoppingToken);
+                    _channel?.BasicNack(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
                 }
+                catch { }
             }
         }
 
-        public override async Task StopAsync(CancellationToken cancellationToken)
+        public override Task StopAsync(CancellationToken cancellationToken)
         {
-            if (_channel != null)
-                await _channel.CloseAsync(cancellationToken);
-            if (_connection != null)
-                await _connection.CloseAsync(cancellationToken);
-
-            await base.StopAsync(cancellationToken);
+            _channel?.Close();
+            _connection?.Close();
+            return base.StopAsync(cancellationToken);
         }
     }
 }
