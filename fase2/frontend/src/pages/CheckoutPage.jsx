@@ -4,25 +4,45 @@ import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCirc
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { crearOrden } from '../services/api';
 
 export const CheckoutPage = () => {
   const { cartItems, subtotal, clearCart } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (!user) {
+      navigate('/login?redirect=/checkout');
+    }
+  }, [user, navigate]);
 
   const [deliveryType, setDeliveryType] = useState('domicilio');
   const [paymentMethod, setPaymentMethod] = useState('payklik');
   const [loading, setLoading] = useState(false);
 
   // Form Fields
-  const [fullName, setFullName] = useState('Melvin García');
-  const [phone, setPhone] = useState('+502 5555 1234');
-  const [address, setAddress] = useState('10a Calle 5-25, Zona 10, Ciudad de Guatemala');
+  const [fullName, setFullName] = useState(user?.nombre || '');
+  const [phone, setPhone] = useState(user?.telefono || '');
+  const [address, setAddress] = useState(user?.direccion || '');
 
   // Card details
-  const [cardNumber, setCardNumber] = useState('4532 •••• •••• 8941');
-  const [expiry, setExpiry] = useState('12/28');
-  const [cvv, setCvv] = useState('321');
+  const [selectedCardId, setSelectedCardId] = useState(user?.tarjetas?.length ? user.tarjetas[0].id : 'manual');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvv, setCvv] = useState('');
+
+  React.useEffect(() => {
+    if (user) {
+      if (!fullName && user.nombre) setFullName(user.nombre);
+      if (!phone && user.telefono) setPhone(user.telefono);
+      if (!address && user.direccion) setAddress(user.direccion);
+      if (user.tarjetas && user.tarjetas.length > 0 && selectedCardId === 'manual') {
+        setSelectedCardId(user.tarjetas[0].id);
+      }
+    }
+  }, [user]);
 
   const taxes = +(subtotal * 0.12).toFixed(2);
   const shipping = deliveryType === 'domicilio' ? 15.00 : 0.00;
@@ -39,9 +59,12 @@ export const CheckoutPage = () => {
     try {
       const order = await crearOrden(
         cartItems,
-        { nombreCompleto: fullName, telefono: phone, direccion: address, tipoEntrega: deliveryType },
+        { clienteId: user?.id || '1', nombreCompleto: fullName, telefono: phone, direccion: address, tipoEntrega: deliveryType },
         { metodo: paymentMethod }
       );
+      if (order?.id) {
+        localStorage.setItem('lastOrder', order.id);
+      }
       clearCart();
       navigate(`/confirmacion/${order.id}`);
     } catch (err) {
@@ -127,6 +150,7 @@ export const CheckoutPage = () => {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="Ej. Juan Pérez"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
                         required
@@ -138,6 +162,7 @@ export const CheckoutPage = () => {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="Ej. +502 5555 1234"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         required
@@ -149,6 +174,7 @@ export const CheckoutPage = () => {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="Ej. Avenida Reforma 12-01, Zona 10, Ciudad de Guatemala"
                         value={address}
                         onChange={(e) => setAddress(e.target.value)}
                         required
@@ -190,35 +216,84 @@ export const CheckoutPage = () => {
                   {/* Card Form */}
                   {paymentMethod === 'payklik' && (
                     <div className="card-form-sub">
-                      <div className="form-group">
-                        <label className="form-label">Número de tarjeta</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-row-2">
+                      {user?.tarjetas && user.tarjetas.length > 0 && (
                         <div className="form-group">
-                          <label className="form-label">Vencimiento</label>
-                          <input
-                            type="text"
+                          <label className="form-label">Seleccionar Tarjeta Registrada</label>
+                          <select
                             className="form-input"
-                            value={expiry}
-                            onChange={(e) => setExpiry(e.target.value)}
-                          />
+                            value={selectedCardId}
+                            onChange={(e) => setSelectedCardId(e.target.value)}
+                          >
+                            {user.tarjetas.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.brand} terminada en •••• {c.last4} (Vence {c.exp})
+                              </option>
+                            ))}
+                            <option value="manual">Usar otra tarjeta distinta...</option>
+                          </select>
                         </div>
-                        <div className="form-group">
-                          <label className="form-label">CVV</label>
-                          <input
-                            type="password"
-                            className="form-input"
-                            value={cvv}
-                            onChange={(e) => setCvv(e.target.value)}
-                          />
+                      )}
+
+                      {selectedCardId === 'manual' || !user?.tarjetas?.length ? (
+                        <>
+                          <div className="form-group">
+                            <label className="form-label">Número de tarjeta</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="4532 0000 0000 4242"
+                              maxLength={19}
+                              value={cardNumber}
+                              onChange={(e) => setCardNumber(e.target.value)}
+                              required={paymentMethod === 'payklik'}
+                            />
+                          </div>
+                          <div className="form-row-2">
+                            <div className="form-group">
+                              <label className="form-label">Vencimiento</label>
+                              <input
+                                type="text"
+                                className="form-input"
+                                placeholder="MM/AA"
+                                maxLength={5}
+                                value={expiry}
+                                onChange={(e) => setExpiry(e.target.value)}
+                                required={paymentMethod === 'payklik'}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">CVV</label>
+                              <input
+                                type="password"
+                                className="form-input"
+                                placeholder="•••"
+                                maxLength={4}
+                                value={cvv}
+                                onChange={(e) => setCvv(e.target.value)}
+                                required={paymentMethod === 'payklik'}
+                              />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="form-row-2" style={{ marginTop: '0.5rem' }}>
+                          <div className="form-group">
+                            <label className="form-label">Código de Seguridad (CVV)</label>
+                            <input
+                              type="password"
+                              className="form-input"
+                              placeholder="•••"
+                              maxLength={4}
+                              value={cvv}
+                              onChange={(e) => setCvv(e.target.value)}
+                              required={paymentMethod === 'payklik'}
+                            />
+                          </div>
+                          <div className="form-group" style={{ display: 'flex', alignItems: 'center', paddingTop: '1.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            <span>Protegido con tokenización segura</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>

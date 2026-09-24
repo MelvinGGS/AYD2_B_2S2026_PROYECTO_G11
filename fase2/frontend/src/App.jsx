@@ -24,9 +24,9 @@ export function App() {
             <Route path="/carrito" element={<CarritoPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/confirmacion/:ordenId" element={<ConfirmacionPage />} />
-            <Route path="/confirmacion" element={<Navigate to="/confirmacion/ORD-2026-08941" replace />} />
+            <Route path="/confirmacion" element={<ConfirmacionPage />} />
             <Route path="/seguimiento/:ordenId" element={<SeguimientoPage />} />
-            <Route path="/seguimiento" element={<Navigate to="/seguimiento/ORD-2026-08941" replace />} />
+            <Route path="/seguimiento" element={<SeguimientoPage />} />
             <Route path="/admin/dashboard" element={<DashboardPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

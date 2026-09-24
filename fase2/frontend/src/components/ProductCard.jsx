@@ -22,9 +22,16 @@ export const ProductCard = ({ product }) => {
 
   return (
     <div className="product-card glass-panel">
-      {/* Product Image Container */}
       <div className="product-image-wrapper">
-        <img src={product.imagen} alt={product.nombre} className="product-image" />
+        <img 
+          src={product.imagen || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80'} 
+          alt={product.nombre} 
+          className="product-image"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80';
+          }}
+        />
         <span className={`product-badge badge ${getTagClass(product.tagType)}`}>
           {product.tag}
         </span>
