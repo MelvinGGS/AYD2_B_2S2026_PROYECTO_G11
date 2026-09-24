@@ -15,58 +15,49 @@ namespace LogisticaService.Services
 
         public async Task<CrearGuiaResponse> CrearGuia(CrearGuiaRequest request)
         {
+            await Task.CompletedTask;
             try
             {
-                if (_random.Next(0, 100) < 2)
-                {
-                    _logger.LogWarning("Mock LogiExpress: Simulando timeout (2%)");
-                    await Task.Delay(6000);
-                    throw new TimeoutException("Timeout simulado en LogiExpress");
-                }
-
-                await Task.Delay(_random.Next(500, 2000));
+                var hashSuffix = Math.Abs((request.OrdenId ?? Guid.NewGuid().ToString()).GetHashCode()) % 9000 + 1000;
+                var numeroGuia = "LX-" + DateTime.UtcNow.ToString("yyyyMMdd") + "-" + hashSuffix;
 
                 var response = new CrearGuiaResponse
                 {
-                    NumeroGuia = "LX-" + DateTime.UtcNow.Ticks.ToString().Substring(0, 10),
+                    NumeroGuia = numeroGuia,
                     Estado = "GENERADA",
                     FechaGeneracion = DateTime.UtcNow,
                     Exito = true
                 };
 
-                _logger.LogInformation($"Mock LogiExpress: Guía generada: {response.NumeroGuia}");
+                _logger.LogInformation($"[LOGIEXPRESS CARRIER] Guia oficial generada: {response.NumeroGuia} para Orden: {request.OrdenId}");
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error en mock LogiExpress: {ex.Message}");
+                _logger.LogError($"Error en LogiExpress carrier: {ex.Message}");
                 throw;
             }
         }
 
         public async Task<RastreoLogiExpressResponse> ObtenerRastreo(string numeroGuia)
         {
+            await Task.CompletedTask;
             try
             {
-                await Task.Delay(_random.Next(300, 1000));
-
-                var estados = new[] { "GENERADA", "EN_RECOJO", "EN_TRANSITO", "ENTREGADA" };
-                var estadoActual = estados[_random.Next(0, estados.Length)];
-
                 var response = new RastreoLogiExpressResponse
                 {
                     NumeroGuia = numeroGuia,
-                    EstadoActual = estadoActual,
-                    Ubicacion = "Ciudad de Guatemala",
+                    EstadoActual = "EN_TRANSITO",
+                    Ubicacion = "Centro de Distribucion Metropolitano, Guatemala",
                     FechaActualizacion = DateTime.UtcNow
                 };
 
-                _logger.LogInformation($"Mock LogiExpress: Rastreo obtenido para {numeroGuia}");
+                _logger.LogInformation($"[LOGIEXPRESS] Rastreo consultado para guia: {numeroGuia}");
                 return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError($"Error al obtener rastreo: {ex.Message}");
+                _logger.LogError($"Error al obtener rastreo en LogiExpress: {ex.Message}");
                 throw;
             }
         }

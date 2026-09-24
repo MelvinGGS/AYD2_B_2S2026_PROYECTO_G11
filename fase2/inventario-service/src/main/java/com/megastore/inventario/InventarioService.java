@@ -38,24 +38,40 @@ public class InventarioService {
     @Transactional
     public void procesarOrdenCreada(Map<String, Object> ordenData) {
         try {
-            String ordenId = (String) ordenData.get("id");
+            String ordenId = ordenData.get("ordenId") != null ? ordenData.get("ordenId").toString() : 
+                (ordenData.get("id") != null ? ordenData.get("id").toString() : "ORD-UNKNOWN");
             // Se asume que el MS de Órdenes manda un productoId y la cantidad requerida en el evento
-            String productoId = ordenData.getOrDefault("productoId", "PROD-001").toString();
-            Integer cantidadSolicitada = Integer.parseInt(ordenData.getOrDefault("cantidad", "1").toString());
+            Object rawPid = ordenData.get("productoId");
+            String productoId = (rawPid != null && !rawPid.toString().isBlank()) ? rawPid.toString() : "PROD-001";
+            Object rawQty = ordenData.get("cantidad");
+            Integer cantidadSolicitada = 1;
+            if (rawQty != null) {
+                try {
+                    cantidadSolicitada = Integer.parseInt(rawQty.toString());
+                } catch (NumberFormatException ignored) {}
+            }
             
             System.out.println("[INVENTARIO LISTENER] Procesando Orden: " + ordenId + " | Producto: " + productoId + " | Cantidad: " + cantidadSolicitada);
 
             // 1. Calcular stock total real del producto en todas las ubicaciones
-            Integer stockTotal = stockRepository.findByProductoId(productoId)
-                                                .stream()
-                                                .mapToInt(Stock::getCantidad)
-                                                .sum();
+            List<Stock> stocks = stockRepository.findByProductoId(productoId);
+            if (stocks == null || stocks.isEmpty()) {
+                stocks = stockRepository.findByProductoId(productoId.toLowerCase());
+            }
+            if (stocks == null || stocks.isEmpty()) {
+                stocks = stockRepository.findByProductoId(productoId.toUpperCase());
+            }
+            Integer stockTotal = (stocks != null) ? stocks.stream().mapToInt(Stock::getCantidad).sum() : 0;
                                                 
             // 2. Calcular cuántas unidades ya están reservadas (por otras órdenes)
-            Integer stockReservado = reservaRepository.findByProductoIdAndActivaTrue(productoId)
-                                                      .stream()
-                                                      .mapToInt(Reserva::getCantidad)
-                                                      .sum();
+            List<Reserva> reservas = reservaRepository.findByProductoIdAndActivaTrue(productoId);
+            if (reservas == null || reservas.isEmpty()) {
+                reservas = reservaRepository.findByProductoIdAndActivaTrue(productoId.toLowerCase());
+            }
+            if (reservas == null || reservas.isEmpty()) {
+                reservas = reservaRepository.findByProductoIdAndActivaTrue(productoId.toUpperCase());
+            }
+            Integer stockReservado = (reservas != null) ? reservas.stream().mapToInt(Reserva::getCantidad).sum() : 0;
 
             int stockDisponible = stockTotal - stockReservado;
 
@@ -70,16 +86,23 @@ public class InventarioService {
                 reservaRepository.save(reserva);
 
                 eventoRespuesta.put("estado", "INVENTARIO_RESERVADO");
+                if (ordenData.get("total") != null) eventoRespuesta.put("total", ordenData.get("total"));
+                if (ordenData.get("monto") != null) eventoRespuesta.put("monto", ordenData.get("monto"));
+                if (ordenData.get("canal") != null) eventoRespuesta.put("canal", ordenData.get("canal"));
+                if (ordenData.get("direccion") != null) eventoRespuesta.put("direccion", ordenData.get("direccion"));
+                if (ordenData.get("direccionDestino") != null) eventoRespuesta.put("direccionDestino", ordenData.get("direccionDestino"));
+                if (ordenData.get("numeroTarjeta") != null) eventoRespuesta.put("numeroTarjeta", ordenData.get("numeroTarjeta"));
+
                 rabbitTemplate.convertAndSend(exchangeName, routingKeyReservado, eventoRespuesta);
                 
-                System.out.println("✅ [INVENTARIO] ÉXITO: Stock reservado (15 min). Evento 'inventario.reservado' publicado.");
+                System.out.println("[INVENTARIO] EXITO: Stock reservado (15 min). Evento 'inventario.reservado' publicado.");
             } else {
                 // No hay suficiente inventario disponible
                 eventoRespuesta.put("estado", "INVENTARIO_INSUFICIENTE");
                 eventoRespuesta.put("motivo", "Stock insuficiente. Solicitado: " + cantidadSolicitada + " | Disponible real: " + stockDisponible);
                 
                 rabbitTemplate.convertAndSend(exchangeName, routingKeyInsuficiente, eventoRespuesta);
-                System.out.println("❌ [INVENTARIO] FALLO: Stock insuficiente. Evento 'inventario.insuficiente' publicado.");
+                System.out.println("[INVENTARIO] FALLO: Stock insuficiente. Evento 'inventario.insuficiente' publicado.");
             }
             
         } catch (Exception e) {
@@ -96,7 +119,7 @@ public class InventarioService {
         for (Reserva r : expiradas) {
             r.setActiva(false);
             reservaRepository.save(r);
-            System.out.println("⏳ [EXPIRACIÓN RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada para orden " + r.getOrdenId());
+            System.out.println("[EXPIRACION RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada para orden " + r.getOrdenId());
         }
     }
 }

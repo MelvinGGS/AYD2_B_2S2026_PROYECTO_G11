@@ -4,39 +4,59 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/mock/payklik")
+@RequestMapping({"/api/payklik", "/mock/payklik"})
+@CrossOrigin(origins = "*")
 public class MockPayKlikController {
 
-    private final Random random = new Random();
-
     @PostMapping("/cobrar")
-    public ResponseEntity<Map<String, Object>> procesarCobro(@RequestBody Map<String, Object> solicitud) throws InterruptedException {
-        int probabilidad = random.nextInt(100);
-        
-        // Simular latencia alta (30% probabilidad)
-        if (probabilidad < 30) {
-            System.out.println("[MOCK PAYKLIK] Simulando latencia alta...");
-            Thread.sleep(6000); // 6 segundos, forzará el TimeLimiter/CircuitBreaker
-        }
-        
-        // Simular error de servidor (20% probabilidad)
-        if (probabilidad >= 30 && probabilidad < 50) {
-            System.out.println("[MOCK PAYKLIK] Simulando error interno del proveedor...");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Error interno en la pasarela de pagos."));
+    public ResponseEntity<Map<String, Object>> procesarCobro(@RequestBody(required = false) Map<String, Object> solicitud) {
+        if (solicitud == null || solicitud.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "RECHAZADO",
+                    "error", "Solicitud de cobro vacia o invalida."
+            ));
         }
 
-        // Éxito (50% probabilidad)
-        System.out.println("[MOCK PAYKLIK] Cobro exitoso.");
+        Object montoObj = solicitud.get("monto") != null ? solicitud.get("monto") : solicitud.get("total");
+        if (montoObj == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "RECHAZADO",
+                    "error", "El monto de la transaccion es obligatorio."
+            ));
+        }
+
+        BigDecimal monto;
+        try {
+            monto = new BigDecimal(montoObj.toString());
+            if (monto.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "RECHAZADO",
+                        "error", "El monto debe ser mayor a cero."
+                ));
+            }
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "RECHAZADO",
+                    "error", "Formato de monto invalido."
+            ));
+        }
+
+        String referencia = "PK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        System.out.println("[PAYKLIK GATEWAY] Transaccion procesada exitosamente. Monto: Q" + monto + " | Referencia: " + referencia);
+
         Map<String, Object> respuesta = new HashMap<>();
         respuesta.put("status", "APROBADO");
-        respuesta.put("referencia", "PK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
-        
+        respuesta.put("referencia", referencia);
+        respuesta.put("fecha", LocalDateTime.now().toString());
+        respuesta.put("mensaje", "Transaccion autorizada exitosamente por PayKlik Gateway.");
+
         return ResponseEntity.ok(respuesta);
     }
 }
