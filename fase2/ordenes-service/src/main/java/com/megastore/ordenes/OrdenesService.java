@@ -146,4 +146,17 @@ public class OrdenesService {
             System.out.println("[ORDENES] Estado de orden " + ordenId + " actualizado en BD a: " + nuevoEstado);
         });
     }
+
+    public void registrarIncidencia(String ordenId, String tipo, String detalle) {
+        String tipoNorm = tipo != null ? tipo.toUpperCase() : "CONSULTA";
+        String detalleNorm = detalle != null ? detalle : "Incidencia de atención al cliente";
+        EventoAuditoria aud = new EventoAuditoria(
+                ordenId,
+                "CALL_CENTER",
+                "INCIDENCIA_" + tipoNorm,
+                detalleNorm
+        );
+        auditoriaRepository.save(aud);
+        System.out.println("[AUDITORIA ATENCION] Incidencia registrada para orden " + ordenId + ": " + tipoNorm);
+    }
 }

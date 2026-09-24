@@ -42,4 +42,12 @@ public class OrdenesController {
         }
         return ordenesService.obtenerOrdenPorId(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
+
+    @PostMapping("/{id}/incidencias")
+    public ResponseEntity<?> registrarIncidencia(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
+        String tipo = body.getOrDefault("tipo", "CONSULTA");
+        String detalle = body.getOrDefault("detalle", "Incidencia de atención al cliente");
+        ordenesService.registrarIncidencia(id, tipo, detalle);
+        return ResponseEntity.ok(java.util.Map.of("status", "REGISTRADA", "ordenId", id, "tipo", tipo));
+    }
 }
