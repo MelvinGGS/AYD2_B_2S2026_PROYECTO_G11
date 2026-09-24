@@ -1,53 +1,86 @@
-# Proyecto Fase 1 — Grupo 11
+# AYD2 — Segundo Semestre 2026 — Grupo 11
 
-## Integrantes
+## MegaStore SGO-Logic: Sistema de Gestión de Órdenes Omnicanal
 
-| Carné | Nombre |
-|---|---|
-| 202300712 | Melvin Geovanni García Sumalá |
-| 202300378 | Maria Fernanda Morales Lima |
-| 202000576 | Susana Paola González Contreras |
-| 202307272 | Bryan Alejandro Anona Paredes |
-| 202112109 | Carlos David de Leon Barrios |
+## Integrantes Grupo 11
 
----
+| Carné         | Nombre                          |
+| ------------- | ------------------------------- |
+| **202300712** | Melvin Geovanni García Sumalá   |
+| **202300378** | Maria Fernanda Morales Lima     |
+| **202000576** | Susana Paola González Contreras |
+| **202307272** | Bryan Alejandro Anona Paredes   |
+| **202112109** | Carlos David de Leon Barrios    |
 
-## Índice de Entregables
+## Fases del Proyecto
 
-### Documento de Definición de Arquitectura (DDA)
+### [Fase 1 — Documento de Definición de Arquitectura (DDA)](fase1/README.md)
 
-Documento Principal Consolidado: [Documento de Definición de Arquitectura (DDA)](DDA.md)
+Contiene la justificación de decisiones arquitectónicas (ADRs), atributos de calidad (EAC), matriz de trazabilidad, diagramas C4 (contexto, componentes, despliegue, bloques) y mockups iniciales.
 
-Secciones del DDA:
-1. [Identificación del caso de negocio](CDU_NYS/identificacion-caso-negocio.md)
-2. [Listado de Stakeholders y preocupaciones arquitectónicas](Bases%20DDA/stakeholders-preocupaciones.md)
-3. [Características del sistema priorizadas](Contexto,%20Decisiones%20y%20Trazabilidad/caracteristicas-priorizadas.md)
-4. [Drivers Requisitos Funcionales](CDU_NYS/drivers-requisitos-funcionales.md)
-5. [Drivers de Calidad (Escenarios Atributos de Calidad - EAC)](Bases%20DDA/drivers-calidad.md)
-6. [Drivers de Restricción](Bases%20DDA/drivers-restriccion.md)
-7. [Matrices de Trazabilidad](Contexto,%20Decisiones%20y%20Trazabilidad/matrices-trazabilidad.md)
+- [Ver entregables de la Fase 1](fase1/README.md)
 
----
+### [Fase 2 — Implementación de Microservicios y MVP Operativo](fase2/README.md)
 
-### Diagramas Arquitectónicos
+Contiene el código fuente completo, contenedores Docker, microservicios en Java Spring Boot y C# .NET 8, frontend web reactivo en React 18, caché Redis, base de datos PostgreSQL y bus de eventos RabbitMQ.
 
-1. [Diagrama de Contexto](Contexto,%20Decisiones%20y%20Trazabilidad/Contexto.png)
-2. [Diagrama de Componentes](Diagrama%20de%20arquitecturas/DiagramaDeComponentes.png)
-3. [Diagrama de Despliegue](Diagrama%20de%20arquitecturas/DiagramaDespliegue.jpg)
-4. [Diagrama de Bloques](Diagrama%20de%20arquitecturas/DiagramadeBloques.png)
-5. [Justificación de Decisiones Arquitectónicas (ADRs)](Contexto,%20Decisiones%20y%20Trazabilidad/justificacion-decisiones-arquitectonicas.md)
+## Iniciar toda la fase2
 
----
+```bash
+# Entrar a la carpeta de la fase 2 y levantar todos los contenedores
+cd fase2 && docker compose up -d --build
+```
 
-### Prototipo Arquitectónico
+- **Frontend SGO-Logic**: [http://localhost:3000](http://localhost:3000)
 
-1. [Mockups o prototipo de alto nivel](mockups.md)
-2. [Flujo principal del sistema](Bases%20DDA/flujo-principal.md)
+## Comandos rápidos
 
----
+### Verificación de Salud de Microservicios (Puertos 8081 - 8086)
+```bash
+for port in 8081 8082 8083 8084 8085 8086; do
+  echo -n "Port $port: "
+  curl -s http://localhost:$port/
+  echo ""
+done
+```
 
-## Tablero Kanban
+### Verificación de Colas y Consumidores RabbitMQ
+```bash
+docker exec -i sgologic-rabbitmq rabbitmqctl list_queues name messages consumers
+```
+- Panel web: [http://localhost:15672](http://localhost:15672) (Usuario: guest / Password: guest)
 
-Tablero Trello del Proyecto: [https://trello.com/b/skO2sFFI/ayd222](https://trello.com/b/skO2sFFI/ayd222)
+### 5. Verificación de Inventario Unificado Multi-Nodo (PostgreSQL)
+```bash
+curl -s http://localhost:8082/api/inventario/unificado
+```
 
-![Tablero Kanban](Bases%20DDA/TableroKanban.png)
+### 6. Verificación de Auditoría en Base de Datos PostgreSQL
+```bash
+docker exec -i sgologic-postgres psql -U sgologic -d sgologic -c "SELECT id, orden_id, tipo_evento, detalle, fecha FROM eventos_auditoria ORDER BY id DESC LIMIT 5;"
+```
+
+# ADR-004: Adaptador Anti-Corruption Layer para integración con ERP AS/400
+
+## Estado
+
+Aceptado
+
+## Contexto
+
+El sistema contable de MegaStore (ERP-Core) está construido sobre AS/400 (tecnología legacy de 1990) y no cuenta con APIs modernas (REST/GraphQL). La Junta Directiva ha prohibido explícitamente modificar su código fuente para evitar riesgos operacionales. Sin embargo, el ERP requiere resúmenes de ventas para su cierre contable bajo pena de multas fiscales.
+
+## Decisión
+
+Se implementará un adaptador batch (Anti-Corruption Layer) dentro del Servicio de Facturación utilizando el motor de tareas programadas de Spring Boot (`@Scheduled`).
+Cada 30 minutos, el adaptador ejecutará un proceso de extracción sobre la base de datos transaccional, transformará la información de órdenes emitidas al formato esperado por el AS/400, y depositará un archivo físico CSV en el volumen compartido `uploads/`.
+
+## Consecuencias Positivas
+
+- Se respeta al 100% la restricción impuesta por la Junta Directiva (cero impacto al legacy).
+- El modelo de dominio de _SGO-Logic_ no se contamina con la estructura obsoleta del ERP.
+- Si el AS/400 está caído, nuestro sistema sigue operando (desacoplamiento total).
+
+## Riesgos y Consecuencias Negativas
+
+- El ERP no reflejará ventas en tiempo real, sufriendo una demora de hasta 30 minutos (consistencia eventual). Esto fue notificado y aceptado por el departamento de Finanzas como un tradeoff operacional aceptable.
