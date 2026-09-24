@@ -38,6 +38,9 @@ export const OrderTimeline = ({ timeline = [] }) => {
                 <div className="step-header">
                   <h4 className="step-title">{step.titulo}</h4>
                   {isActive && <span className="active-pulse-badge">En curso</span>}
+                  {step.estado === 'ENTREGADA' && isCompleted && (
+                    <span className="completed-badge">Entregado</span>
+                  )}
                 </div>
                 <p className="step-desc">{step.desc}</p>
                 {step.fecha && step.fecha !== '-' && (

@@ -21,7 +21,7 @@ public class PagosListener {
 
         String ordenId = (String) evento.get("ordenId");
         
-        Object montoObj = evento.get("monto");
+        Object montoObj = evento.get("monto") != null ? evento.get("monto") : evento.get("total");
         BigDecimal monto = BigDecimal.ZERO;
         if (montoObj instanceof Number) {
             monto = new BigDecimal(montoObj.toString());
@@ -30,9 +30,10 @@ public class PagosListener {
         }
 
         String canal = evento.containsKey("canal") ? (String) evento.get("canal") : "Web Store";
-        String numeroTarjeta = evento.containsKey("numeroTarjeta") ? (String) evento.get("numeroTarjeta") : "4500123456789012";
+        String numeroTarjeta = evento.containsKey("numeroTarjeta") ? (String) evento.get("numeroTarjeta") : "4500123456784242";
+        String direccionDestino = evento.containsKey("direccionDestino") ? (String) evento.get("direccionDestino") : (String) evento.get("direccion");
 
         // Iniciar cobro con el Circuit Breaker activo
-        pagosService.procesarPagoConCircuitBreaker(ordenId, monto, canal, numeroTarjeta);
+        pagosService.procesarPagoConCircuitBreaker(ordenId, monto, canal, numeroTarjeta, direccionDestino);
     }
 }

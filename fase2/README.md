@@ -54,7 +54,36 @@ docker compose ps
 - **Base de Datos PostgreSQL**:
   - Host: `localhost` | Puerto: `5432`
   - Base de datos: `sgologic`
-  - Usuario: `sgologic_user`
-  - Contraseña: `sgologic_pass`
+  - Usuario: `sgologic`
+  - Contraseña: `sgologic2026`
 - **Caché Redis**:
   - Host: `localhost` | Puerto: `6379`
+
+---
+
+## Comandos rápidos
+
+### Verificación de Salud de Microservicios (Puertos 8081 - 8086)
+```bash
+for port in 8081 8082 8083 8084 8085 8086; do
+  echo -n "Port $port: "
+  curl -s http://localhost:$port/
+  echo ""
+done
+```
+
+### Verificación de Colas y Consumidores RabbitMQ
+```bash
+docker exec -i sgologic-rabbitmq rabbitmqctl list_queues name messages consumers
+```
+- Panel web: [http://localhost:15672](http://localhost:15672) (Usuario: guest / Password: guest)
+
+### 5. Verificación de Inventario Unificado Multi-Nodo (PostgreSQL)
+```bash
+curl -s http://localhost:8082/api/inventario/unificado
+```
+
+### 6. Verificación de Auditoría en Base de Datos PostgreSQL
+```bash
+docker exec -i sgologic-postgres psql -U sgologic -d sgologic -c "SELECT id, orden_id, tipo_evento, detalle, fecha FROM eventos_auditoria ORDER BY id DESC LIMIT 5;"
+```

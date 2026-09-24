@@ -26,6 +26,19 @@ namespace NotificacionesService
 
         public static List<NotificationLog> GetLogs() => LogsMemory.OrderByDescending(x => x.Fecha).Take(50).ToList();
 
+        public static void RegistrarNotificacion(string evento, string contenido)
+        {
+            lock (LogsMemory)
+            {
+                LogsMemory.Add(new NotificationLog
+                {
+                    Evento = evento,
+                    Contenido = contenido,
+                    Fecha = DateTime.UtcNow
+                });
+            }
+        }
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             await Task.Yield(); // Allow startup without blocking thread
@@ -58,6 +71,10 @@ namespace NotificacionesService
                     channel.ExchangeDeclare(exchange: exchange, type: ExchangeType.Topic, durable: true);
                     channel.QueueDeclare(queue: queue, durable: true, exclusive: false, autoDelete: false);
                     channel.QueueBind(queue: queue, exchange: exchange, routingKey: "orden.#");
+                    channel.QueueBind(queue: queue, exchange: exchange, routingKey: "inventario.#");
+                    channel.QueueBind(queue: queue, exchange: exchange, routingKey: "pago.#");
+                    channel.QueueBind(queue: queue, exchange: exchange, routingKey: "factura.#");
+                    channel.QueueBind(queue: queue, exchange: exchange, routingKey: "despacho.#");
 
                     var consumer = new EventingBasicConsumer(channel);
                     consumer.Received += (model, ea) =>
@@ -66,7 +83,7 @@ namespace NotificacionesService
                         var message = Encoding.UTF8.GetString(body);
                         var routingKey = ea.RoutingKey;
 
-                        _logger.LogInformation("📢 [NOTIFICACIONES .NET 8] Evento recibido [{RoutingKey}]: {Message}", routingKey, message);
+                        _logger.LogInformation("[NOTIFICACIONES .NET 8] Evento recibido [{RoutingKey}]: {Message}", routingKey, message);
 
                         lock (LogsMemory)
                         {

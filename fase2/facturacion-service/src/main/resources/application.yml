@@ -21,6 +21,19 @@ spring:
     port: ${SPRING_RABBITMQ_PORT:5672}
     username: ${SPRING_RABBITMQ_USERNAME:guest}
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 5000ms
+          max-interval: 30000ms
+          multiplier: 2.0
+          max-attempts: 3
+
+logging:
+  level:
+    root: INFO
+    org.springframework.amqp: WARN
 
 app:
   uploads-dir: uploads

@@ -5,12 +5,22 @@ import { Navbar } from '../components/Navbar';
 import { CartItem } from '../components/CartItem';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 export const CarritoPage = () => {
   const { cartItems, totalCount, subtotal } = useCart();
+  const { user } = useAuth();
   const [discountCode, setDiscountCode] = useState('');
   const [discountApplied, setDiscountApplied] = useState(15.00);
   const navigate = useNavigate();
+
+  const handleProceedToCheckout = () => {
+    if (!user) {
+      navigate('/login?redirect=/checkout');
+    } else {
+      navigate('/checkout');
+    }
+  };
 
   const handleApplyCoupon = (e) => {
     e.preventDefault();
@@ -119,7 +129,7 @@ export const CarritoPage = () => {
                 {/* Action Buttons */}
                 <div className="summary-actions">
                   <button
-                    onClick={() => navigate('/checkout')}
+                    onClick={handleProceedToCheckout}
                     className="btn-primary btn-block btn-checkout"
                   >
                     <span>Proceder al pago</span>
