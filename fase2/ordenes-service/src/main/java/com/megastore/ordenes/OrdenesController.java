@@ -33,4 +33,13 @@ public class OrdenesController {
     public ResponseEntity<List<Orden>> listarTodas() {
         return ResponseEntity.ok(ordenesService.listarTodas());
     }
+
+    @PatchMapping("/{id}/estado")
+    public ResponseEntity<Orden> actualizarEstado(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
+        String nuevoEstado = body.get("estado");
+        if (nuevoEstado != null) {
+            ordenesService.actualizarEstadoOrden(id, nuevoEstado);
+        }
+        return ordenesService.obtenerOrdenPorId(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
 }

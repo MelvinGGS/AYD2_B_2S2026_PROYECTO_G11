@@ -34,6 +34,21 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue ordenesStatusQueue() {
+        return new Queue("ordenes.status.queue", true);
+    }
+
+    @Bean
+    public Binding bindingOrdenesPago(Queue ordenesStatusQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(ordenesStatusQueue).to(topicExchange).with("pago.#");
+    }
+
+    @Bean
+    public Binding bindingOrdenesDespacho(Queue ordenesStatusQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(ordenesStatusQueue).to(topicExchange).with("despacho.#");
+    }
+
+    @Bean
     public Jackson2JsonMessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();
     }
