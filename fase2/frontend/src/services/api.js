@@ -470,3 +470,20 @@ function buildTimeline(estadoActual) {
     { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'Finalizado', completado: e === 'ENTREGADA', activo: false }
   ];
 }
+
+export const registrarIncidenciaCliente = async (ordenId, tipo, detalle) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/${encodeURIComponent(ordenId)}/incidencias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, detalle })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Error al registrar incidencia en backend:', e);
+  }
+  return null;
+};
+

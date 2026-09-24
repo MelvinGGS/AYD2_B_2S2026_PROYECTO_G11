@@ -4,7 +4,7 @@ import { Search, Truck, HelpCircle, Package, ArrowLeft, ShieldCheck, MapPin, Clo
 import { Navbar } from '../components/Navbar';
 import { OrderTimeline } from '../components/OrderTimeline';
 import { Footer } from '../components/Footer';
-import { getOrden, getOrdenes } from '../services/api';
+import { getOrden, getOrdenes, registrarIncidenciaCliente } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export const SeguimientoPage = () => {
@@ -80,8 +80,11 @@ export const SeguimientoPage = () => {
     return () => clearInterval(interval);
   }, [orden?.id, orden?.estado]);
 
-  const handleSendIncident = (e) => {
+  const handleSendIncident = async (e) => {
     e.preventDefault();
+    if (orden?.id) {
+      await registrarIncidenciaCliente(orden.id, incidentType, incidentNote);
+    }
     setIncidentSent(true);
     setTimeout(() => {
       setIncidentSent(false);

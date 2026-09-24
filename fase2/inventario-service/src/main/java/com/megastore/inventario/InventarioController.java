@@ -157,4 +157,34 @@ public class InventarioController {
 
         return ResponseEntity.ok(unificado);
     }
+
+    @PostMapping("/stock/ajuste")
+    public ResponseEntity<?> ajustarStock(@RequestBody Map<String, Object> body) {
+        String productoId = body.get("productoId") != null ? body.get("productoId").toString() : null;
+        String ubicacionId = body.get("ubicacionId") != null ? body.get("ubicacionId").toString() : "CD_NORTE";
+        Integer cantidad = body.get("cantidad") != null ? Integer.parseInt(body.get("cantidad").toString()) : 0;
+
+        if (productoId == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "productoId es obligatorio"));
+        }
+
+        List<Stock> stocks = stockRepository.findByProductoId(productoId);
+        Stock stockItem = stocks.stream()
+                .filter(s -> s.getUbicacion() != null && s.getUbicacion().getId().equalsIgnoreCase(ubicacionId))
+                .findFirst()
+                .orElse(null);
+
+        if (stockItem != null) {
+            stockItem.setCantidad(Math.max(0, stockItem.getCantidad() + cantidad));
+            stockRepository.save(stockItem);
+            return ResponseEntity.ok(Map.of(
+                    "status", "ACTUALIZADO",
+                    "productoId", productoId,
+                    "ubicacionId", ubicacionId,
+                    "nuevaCantidad", stockItem.getCantidad()
+            ));
+        }
+
+        return ResponseEntity.notFound().build();
+    }
 }
