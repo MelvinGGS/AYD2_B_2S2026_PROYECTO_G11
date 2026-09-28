@@ -3,9 +3,9 @@ import { Link, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, ShoppingBag, Users, Settings, RefreshCw,
   TrendingUp, AlertTriangle, Clock, CheckCircle2, MoreVertical, Store, LogOut,
-  Search, Filter, ShieldCheck, Database, Layers, ArrowUpRight, CheckCircle, Truck, FileText
+  Search, Filter, ShieldCheck, Database, Layers, ArrowUpRight, CheckCircle, Truck, FileText, LifeBuoy
 } from 'lucide-react';
-import { getDashboardMetrics, getInventarioUnificado, getClientes, updateEstadoOrden } from '../services/api';
+import { getDashboardMetrics, getInventarioUnificado, getClientes, updateEstadoOrden, getIncidencias } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export const DashboardPage = () => {
@@ -44,18 +44,23 @@ export const DashboardPage = () => {
 
   const [inventario, setInventario] = useState(defaultInventario);
   const [clientes, setClientes] = useState(defaultClientes);
+  const [incidencias, setIncidencias] = useState([]);
 
   const fetchMetrics = async () => {
     setLoading(true);
     try {
-      const [dataMetrics, dataInventario, dataClientes] = await Promise.all([
+      const [dataMetrics, dataInventario, dataClientes, dataIncidencias] = await Promise.all([
         getDashboardMetrics(),
         getInventarioUnificado(),
-        getClientes()
+        getClientes(),
+        getIncidencias()
       ]);
       setMetrics(dataMetrics);
       if (dataInventario && dataInventario.length > 0) {
         setInventario(dataInventario);
+      }
+      if (dataIncidencias && dataIncidencias.length > 0) {
+        setIncidencias(dataIncidencias);
       }
       if (dataClientes && dataClientes.length > 0) {
         const enriched = dataClientes.map(c => ({
@@ -195,6 +200,14 @@ export const DashboardPage = () => {
           >
             <Users size={20} />
             <span>Clientes Omnicanal</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === 'soporte' ? 'active' : ''}`}
+            onClick={() => setActiveTab('soporte')}
+          >
+            <LifeBuoy size={20} />
+            <span>Soporte e Incidencias</span>
           </button>
 
           <button
@@ -605,6 +618,52 @@ export const DashboardPage = () => {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SOPORTE E INCIDENCIAS */}
+            {activeTab === 'soporte' && (
+              <div className="tab-pane-container glass-panel">
+                <div className="tab-pane-header">
+                  <div>
+                    <h2>Gestión de Incidencias de Clientes</h2>
+                    <p>Reportes de problemas, cambios y solicitudes desde la vista de seguimiento del cliente.</p>
+                  </div>
+                  <span className="badge badge-warning">{incidencias.length} Registradas</span>
+                </div>
+
+                <div className="table-responsive">
+                  <table className="ops-table">
+                    <thead>
+                      <tr>
+                        <th>ID Ticket</th>
+                        <th>Orden Asociada</th>
+                        <th>Fecha</th>
+                        <th>Tipo de Incidencia</th>
+                        <th>Detalle del Cliente</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {incidencias.length === 0 ? (
+                        <tr><td colSpan="6" style={{textAlign: 'center', padding: '2rem'}}>No hay incidencias reportadas.</td></tr>
+                      ) : (
+                        incidencias.map((inc) => (
+                          <tr key={inc.id}>
+                            <td className="font-mono text-orange">TCK-{inc.id}</td>
+                            <td className="font-mono">{inc.ordenId}</td>
+                            <td>{new Date(inc.fecha).toLocaleString()}</td>
+                            <td><span className="badge badge-warning">{inc.tipoEvento?.replace('INCIDENCIA_', '')}</span></td>
+                            <td style={{maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={inc.detalle}>{inc.detalle}</td>
+                            <td>
+                              <Link to={`/seguimiento/${inc.ordenId}`} className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>Ver Orden</Link>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

@@ -518,3 +518,15 @@ export const registrarIncidenciaCliente = async (ordenId, tipo, detalle) => {
   return null;
 };
 
+export const getIncidencias = async () => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/incidencias`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Error al obtener incidencias del backend:', e);
+  }
+  return [];
+};
+

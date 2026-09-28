@@ -159,4 +159,8 @@ public class OrdenesService {
         auditoriaRepository.save(aud);
         System.out.println("[AUDITORIA ATENCION] Incidencia registrada para orden " + ordenId + ": " + tipoNorm);
     }
+
+    public List<EventoAuditoria> listarIncidencias() {
+        return auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("INCIDENCIA");
+    }
 }
