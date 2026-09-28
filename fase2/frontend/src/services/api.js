@@ -345,6 +345,28 @@ export const normalizeOrder = (raw) => {
 };
 
 export const crearOrden = async (carrito, shippingInfo, paymentInfo) => {
+  // Pre-validar disponibilidad de inventario antes de crear la orden
+  for (const item of carrito) {
+    try {
+      const res = await fetch(`${INVENTARIO_API}/disponibilidad/${item.id}`);
+      if (res.ok) {
+        const stockData = await res.json();
+        const totalDisp = stockData.reduce((sum, u) => sum + u.cantidadDisponible, 0);
+        if (totalDisp < item.cantidad) {
+          throw new Error(`Inventario insuficiente para "${item.nombre}". Disponible: ${totalDisp}, solicitado: ${item.cantidad}.`);
+        }
+      } else if (res.status === 404) {
+        throw new Error(`Producto "${item.nombre}" no encontrado en inventario.`);
+      }
+    } catch (e) {
+      if (e.message.includes('Inventario insuficiente') || e.message.includes('no encontrado')) {
+        throw e; // Abortar la creación de la orden
+      }
+      // Si el servicio de inventario está caído, dejamos pasar (el backend validará asincrónicamente)
+      console.warn('No se pudo pre-validar inventario:', e.message);
+    }
+  }
+
   const payload = {
     clienteId: shippingInfo.clienteId || '1',
     clienteNombre: shippingInfo.nombreCompleto || 'Cliente Omnicanal',
@@ -461,6 +483,15 @@ export const getDashboardMetrics = async () => {
 function buildTimeline(estadoActual) {
   const e = estadoActual || 'CREADA';
   const isFinalizada = e === 'ENTREGADA';
+  const isError = e === 'INVENTARIO_INSUFICIENTE' || e === 'CANCELADA';
+
+  if (isError) {
+    return [
+      { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: false },
+      { estado: e, titulo: 'Cancelada', desc: 'Orden cancelada por falta de inventario o pago fallido.', fecha: 'Cancelado', completado: false, activo: true, statusType: 'error' }
+    ];
+  }
+
   return [
     { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: !isFinalizada && e === 'CREADA' },
     { estado: 'PAGADA', titulo: 'Pagada', desc: 'Pago procesado por pasarela PayKlik.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: !isFinalizada && e === 'PAGADA' },
@@ -485,5 +516,17 @@ export const registrarIncidenciaCliente = async (ordenId, tipo, detalle) => {
     console.warn('Error al registrar incidencia en backend:', e);
   }
   return null;
+};
+
+export const getIncidencias = async () => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/incidencias`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Error al obtener incidencias del backend:', e);
+  }
+  return [];
 };
 
