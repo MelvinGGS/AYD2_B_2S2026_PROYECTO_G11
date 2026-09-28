@@ -69,6 +69,7 @@ export const CheckoutPage = () => {
       navigate(`/confirmacion/${order.id}`);
     } catch (err) {
       console.error('Checkout error:', err);
+      alert(err.message || 'Hubo un problema al procesar tu compra. Por favor intenta de nuevo.');
     } finally {
       setLoading(false);
     }
