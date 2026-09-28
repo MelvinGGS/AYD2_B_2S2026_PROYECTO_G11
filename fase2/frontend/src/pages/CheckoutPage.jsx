@@ -260,7 +260,10 @@ export const CheckoutPage = () => {
                               placeholder="4532 0000 0000 4242"
                               maxLength={19}
                               value={cardNumber}
-                              onChange={(e) => setCardNumber(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                setCardNumber(val.match(/.{1,4}/g)?.join(' ') || val);
+                              }}
                               required={paymentMethod === 'payklik'}
                             />
                           </div>
@@ -273,7 +276,11 @@ export const CheckoutPage = () => {
                                 placeholder="MM/AA"
                                 maxLength={5}
                                 value={expiry}
-                                onChange={(e) => setExpiry(e.target.value)}
+                                onChange={(e) => {
+                                  let val = e.target.value.replace(/\D/g, '');
+                                  if (val.length > 2) val = val.substring(0, 2) + '/' + val.substring(2, 4);
+                                  setExpiry(val);
+                                }}
                                 required={paymentMethod === 'payklik'}
                               />
                             </div>
