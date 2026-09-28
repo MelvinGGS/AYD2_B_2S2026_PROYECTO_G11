@@ -659,7 +659,16 @@ export const DashboardPage = () => {
                             <td><span className="badge badge-warning">{inc.tipoEvento?.replace('INCIDENCIA_', '')}</span></td>
                             <td style={{maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={inc.detalle}>{inc.detalle}</td>
                             <td>
-                              <Link to={`/seguimiento/${inc.ordenId}`} className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>Ver Orden</Link>
+                              <button 
+                                onClick={() => {
+                                  setOrderSearch(inc.ordenId);
+                                  setOrderStatusFilter('TODOS');
+                                  setActiveTab('pedidos');
+                                }} 
+                                className="btn-secondary btn-sm"
+                              >
+                                Ver en Pedidos
+                              </button>
                             </td>
                           </tr>
                         ))
