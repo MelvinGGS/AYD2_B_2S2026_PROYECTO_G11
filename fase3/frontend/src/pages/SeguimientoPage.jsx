@@ -254,8 +254,23 @@ export const SeguimientoPage = () => {
 
                 <div className="detail-item">
                   <span className="detail-label">Método de pago</span>
-                  <span className="detail-val">{orden.metodoPago || 'Transferencia bancaria'}</span>
+                  <span className="detail-val">
+                    {orden.metodoPago === 'credito_propio' ? 'Crédito Propio (Paga en 30 días)' : (orden.metodoPago || 'Transferencia bancaria')}
+                  </span>
                 </div>
+
+                {orden.metodoPago === 'credito_propio' && (
+                  <div className="detail-item">
+                    <span className="detail-label">Vencimiento del crédito</span>
+                    <span className="detail-val font-bold" style={{ color: 'var(--orange-primary)' }}>
+                      {(() => {
+                        const d = new Date(orden.fechaCreacion || orden.fecha || Date.now());
+                        d.setDate(d.getDate() + 30);
+                        return d.toLocaleDateString('es-GT', { day: 'numeric', month: 'short', year: 'numeric' });
+                      })()} (0% recargo)
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Items summary snapshot */}
@@ -359,6 +374,7 @@ export const SeguimientoPage = () => {
                       <option value="direccion">Corrección de dirección de entrega</option>
                       <option value="producto">Cambio o devolución de producto</option>
                       <option value="pago">Aclaración de cargo PayKlik</option>
+                      <option value="credito">Consulta o prórroga de Crédito Propio (30 días)</option>
                     </select>
                   </div>
 
