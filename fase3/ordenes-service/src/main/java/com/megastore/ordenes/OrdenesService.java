@@ -98,6 +98,8 @@ public class OrdenesService {
             evento.put("direccion", guardada.getDireccion());
             evento.put("direccionDestino", guardada.getDireccion());
             evento.put("estado", guardada.getEstado());
+            evento.put("metodoPago", guardada.getMetodoPago() != null ? guardada.getMetodoPago() : "payklik");
+            evento.put("plazoDias", "credito_propio".equalsIgnoreCase(guardada.getMetodoPago()) ? 30 : 0);
             evento.put("codigoRastreo", guardada.getCodigoRastreo());
             evento.put("fecha", guardada.getFechaCreacion().toString());
             if (guardada.getItems() != null && !guardada.getItems().isEmpty()) {

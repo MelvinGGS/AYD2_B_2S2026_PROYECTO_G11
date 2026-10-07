@@ -30,10 +30,16 @@ public class PagosListener {
         }
 
         String canal = evento.containsKey("canal") ? (String) evento.get("canal") : "Web Store";
+        String metodoPago = evento.containsKey("metodoPago") ? (String) evento.get("metodoPago") : "payklik";
         String numeroTarjeta = evento.containsKey("numeroTarjeta") ? (String) evento.get("numeroTarjeta") : "4500123456784242";
         String direccionDestino = evento.containsKey("direccionDestino") ? (String) evento.get("direccionDestino") : (String) evento.get("direccion");
 
-        // Iniciar cobro con el Circuit Breaker activo
-        pagosService.procesarPagoConCircuitBreaker(ordenId, monto, canal, numeroTarjeta, direccionDestino);
+        // Si la orden es bajo Crédito Propio (BNPL 30 días), procesar financiamiento sin consultar PayKlik
+        if ("credito_propio".equalsIgnoreCase(metodoPago) || "CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPago)) {
+            pagosService.procesarCreditoPropioBNPL(ordenId, monto, canal, direccionDestino);
+        } else {
+            // Iniciar cobro con el Circuit Breaker activo contra pasarela PayKlik
+            pagosService.procesarPagoConCircuitBreaker(ordenId, monto, canal, numeroTarjeta, direccionDestino);
+        }
     }
 }
