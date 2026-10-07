@@ -48,5 +48,31 @@ namespace NotificacionesService
                 payload
             });
         }
+
+        [HttpGet("stream")]
+        public async Task StreamNotifications(CancellationToken cancellationToken)
+        {
+            Response.ContentType = "text/event-stream";
+            Response.Headers.Append("Cache-Control", "no-cache");
+            Response.Headers.Append("Connection", "keep-alive");
+
+            int ultimoConteo = 0;
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var logs = RabbitMQConsumerService.GetLogs();
+                if (logs.Count > ultimoConteo)
+                {
+                    var nuevos = logs.Take(logs.Count - ultimoConteo);
+                    foreach (var log in nuevos)
+                    {
+                        var data = System.Text.Json.JsonSerializer.Serialize(log);
+                        await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                        await Response.Body.FlushAsync(cancellationToken);
+                    }
+                    ultimoConteo = logs.Count;
+                }
+                await Task.Delay(1000, cancellationToken);
+            }
+        }
     }
 }

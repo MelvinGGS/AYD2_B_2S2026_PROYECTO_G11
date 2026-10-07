@@ -124,4 +124,38 @@ public class PagosService {
 
         return guardado;
     }
+
+    public IntentoPago procesarCreditoPropioBNPL(String ordenId, BigDecimal monto, String canal, String direccionDestino) {
+        System.out.println("[BNPL CREDITO PROPIO] Aprobando financiamiento a 30 dias para Orden: " + ordenId);
+
+        String refCredito = "BNPL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        IntentoPago intento = new IntentoPago(
+                ordenId,
+                canal != null ? canal : "Web Store",
+                monto,
+                "CREDITO_PROPIO_30D",
+                "BNPL-30D",
+                "APROBADO_CREDITO",
+                refCredito
+        );
+        IntentoPago guardado = intentoPagoRepository.save(intento);
+
+        // Publicar pago confirmado en RabbitMQ para que Facturacion SAT y Logistica continuen normalmente
+        Map<String, Object> evento = new HashMap<>();
+        evento.put("ordenId", ordenId);
+        evento.put("monto", monto);
+        evento.put("total", monto);
+        evento.put("canal", canal != null ? canal : "Web Store");
+        evento.put("metodoPago", "credito_propio");
+        evento.put("plazoDias", 30);
+        evento.put("estado", "PAGADO_BNPL");
+        evento.put("referenciaPayklik", refCredito);
+        evento.put("direccionDestino", direccionDestino != null ? direccionDestino : "Ciudad de Guatemala");
+        evento.put("fecha", LocalDateTime.now().toString());
+
+        rabbitTemplate.convertAndSend(exchangeName, routingKeyConfirmado, evento);
+        System.out.println("[BNPL CONFIRMADO] Orden " + ordenId + " financiada a 30 dias con 0% recargo. Ref: " + refCredito);
+
+        return guardado;
+    }
 }
