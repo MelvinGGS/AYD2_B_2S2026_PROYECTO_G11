@@ -50,4 +50,9 @@ public class OrdenesController {
         ordenesService.registrarIncidencia(id, tipo, detalle);
         return ResponseEntity.ok(java.util.Map.of("status", "REGISTRADA", "ordenId", id, "tipo", tipo));
     }
+
+    @GetMapping("/incidencias")
+    public ResponseEntity<List<EventoAuditoria>> listarIncidencias() {
+        return ResponseEntity.ok(ordenesService.listarIncidencias());
+    }
 }

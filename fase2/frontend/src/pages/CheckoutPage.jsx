@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCircle2, Shield } from 'lucide-react';
+import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCircle2, Shield, AlertTriangle, X } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
@@ -21,6 +21,7 @@ export const CheckoutPage = () => {
   const [deliveryType, setDeliveryType] = useState('domicilio');
   const [paymentMethod, setPaymentMethod] = useState('payklik');
   const [loading, setLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState(null);
 
   // Form Fields
   const [fullName, setFullName] = useState(user?.nombre || '');
@@ -56,6 +57,7 @@ export const CheckoutPage = () => {
     }
 
     setLoading(true);
+    setCheckoutError(null);
     try {
       const order = await crearOrden(
         cartItems,
@@ -69,6 +71,7 @@ export const CheckoutPage = () => {
       navigate(`/confirmacion/${order.id}`);
     } catch (err) {
       console.error('Checkout error:', err);
+      setCheckoutError(err.message || 'Hubo un problema al procesar tu compra. Por favor intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -104,6 +107,19 @@ export const CheckoutPage = () => {
           {/* Left Column: Delivery & Payment Options */}
           <div className="checkout-main-forms">
             <h1 className="checkout-title">Finalizar Compra</h1>
+
+            {checkoutError && (
+              <div className="glass-panel" style={{ borderLeft: '4px solid var(--orange-primary)', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', backgroundColor: 'rgba(255, 140, 0, 0.05)' }}>
+                <AlertTriangle size={24} style={{ color: 'var(--orange-primary)', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ margin: '0 0 0.4rem 0', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600 }}>Alerta de Inventario</h4>
+                  <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>{checkoutError}</p>
+                </div>
+                <button onClick={() => setCheckoutError(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} title="Cerrar alerta">
+                  <X size={20} />
+                </button>
+              </div>
+            )}
 
             {/* Delivery Method */}
             <section className="checkout-section glass-panel">
@@ -244,7 +260,10 @@ export const CheckoutPage = () => {
                               placeholder="4532 0000 0000 4242"
                               maxLength={19}
                               value={cardNumber}
-                              onChange={(e) => setCardNumber(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                setCardNumber(val.match(/.{1,4}/g)?.join(' ') || val);
+                              }}
                               required={paymentMethod === 'payklik'}
                             />
                           </div>
@@ -257,7 +276,11 @@ export const CheckoutPage = () => {
                                 placeholder="MM/AA"
                                 maxLength={5}
                                 value={expiry}
-                                onChange={(e) => setExpiry(e.target.value)}
+                                onChange={(e) => {
+                                  let val = e.target.value.replace(/\D/g, '');
+                                  if (val.length > 2) val = val.substring(0, 2) + '/' + val.substring(2, 4);
+                                  setExpiry(val);
+                                }}
                                 required={paymentMethod === 'payklik'}
                               />
                             </div>

@@ -103,7 +103,9 @@ public class InventarioController {
         List<Stock> stockList = stockRepository.findByProductoId(productoId);
         
         if (stockList.isEmpty()) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(404).body(List.of(
+                Map.of("error", "Producto no encontrado", "productoId", productoId)
+            ));
         }
 
         // Mapeamos a un formato estructurado desglosado por tienda/CD
