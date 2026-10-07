@@ -96,11 +96,18 @@ export const ConfirmacionPage = () => {
                 </div>
                 <div className="summary-line">
                   <span>Método de pago</span>
-                  <span>{orden?.metodoPago || 'PayKlik'}</span>
+                  <span>{orden?.metodoPago === 'credito_propio' ? 'Crédito Propio MegaStore (Paga en 30 días)' : (orden?.metodoPago || 'PayKlik')}</span>
                 </div>
+
+                {orden?.metodoPago === 'credito_propio' && (
+                  <div className="summary-line" style={{ color: 'var(--orange-primary)', fontSize: '0.85rem' }}>
+                    <span>Condición crediticia</span>
+                    <span>0% recargo — 30 días de gracia</span>
+                  </div>
+                )}
                 
                 <div className="summary-line total-line">
-                  <span>Total pagado</span>
+                  <span>{orden?.metodoPago === 'credito_propio' ? 'Total financiado a 30 días' : 'Total pagado'}</span>
                   <span className="total-highlight">${orden?.total ? Number(orden.total).toFixed(2) : '0.00'}</span>
                 </div>
               </div>
@@ -111,6 +118,21 @@ export const ConfirmacionPage = () => {
               <Calendar size={20} className="icon-orange" />
               <span>Entrega estimada: <strong>{getEstimatedDate()}</strong></span>
             </div>
+
+            {orden?.metodoPago === 'credito_propio' && (
+              <div className="delivery-estimate-card" style={{ marginTop: '0.75rem', borderColor: 'rgba(255, 107, 0, 0.35)' }}>
+                <ShieldCheck size={20} className="icon-orange" />
+                <span>
+                  Fecha límite de pago: <strong>{
+                    (() => {
+                      const d = new Date(orden?.fechaCreacion || orden?.fecha || Date.now());
+                      d.setDate(d.getDate() + 30);
+                      return d.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                    })()
+                  }</strong> (Sin intereses)
+                </span>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="confirmacion-actions">

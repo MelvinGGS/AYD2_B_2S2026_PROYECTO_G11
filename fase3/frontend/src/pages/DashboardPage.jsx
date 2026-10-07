@@ -17,6 +17,7 @@ export const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('TODOS');
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState('TODOS');
 
   const handleStatusChange = async (ordenId, newStatus) => {
     try {
@@ -152,7 +153,9 @@ export const DashboardPage = () => {
     const s = orderSearch.toLowerCase();
     const matchesSearch = oId.includes(s) || oClient.includes(s);
     const matchesFilter = orderStatusFilter === 'TODOS' || o.estado === orderStatusFilter;
-    return matchesSearch && matchesFilter;
+    const matchesPayment = orderPaymentFilter === 'TODOS' ||
+      (orderPaymentFilter === 'credito_propio' ? o.metodoPago === 'credito_propio' : o.metodoPago !== 'credito_propio');
+    return matchesSearch && matchesFilter && matchesPayment;
   }) || [];
 
   return (
@@ -509,6 +512,17 @@ export const DashboardPage = () => {
                     <option value="EN_TRANSITO">En Tránsito</option>
                     <option value="ENTREGADA">Entregada</option>
                   </select>
+
+                  <select
+                    className="form-input"
+                    style={{ width: '210px' }}
+                    value={orderPaymentFilter}
+                    onChange={(e) => setOrderPaymentFilter(e.target.value)}
+                  >
+                    <option value="TODOS">Todos los métodos de pago</option>
+                    <option value="credito_propio">Crédito Propio (BNPL 30d)</option>
+                    <option value="otros">Contado / PayKlik</option>
+                  </select>
                 </div>
 
                 <div className="table-responsive">
@@ -532,7 +546,15 @@ export const DashboardPage = () => {
                           <td>{new Date(ord.fechaCreacion || ord.fecha || Date.now()).toLocaleDateString()}</td>
                           <td className="font-bold">{ord.clienteNombre || ord.cliente || 'Cliente Omnicanal'}</td>
                           <td><span className="channel-tag">{ord.canal || 'Web Store'}</span></td>
-                          <td className="font-label-sm">{ord.metodoPago || 'PayKlik'}</td>
+                          <td className="font-label-sm">
+                            {ord.metodoPago === 'credito_propio' ? (
+                              <span className="badge badge-warning" style={{ background: 'rgba(255, 107, 0, 0.15)', color: 'var(--orange-primary)', border: '1px solid rgba(255, 107, 0, 0.35)', fontWeight: 600 }}>
+                                Crédito Propio (30d)
+                              </span>
+                            ) : (
+                              ord.metodoPago || 'PayKlik'
+                            )}
+                          </td>
                           <td>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                               {getStatusBadge(ord.estado)}
@@ -656,7 +678,11 @@ export const DashboardPage = () => {
                             <td className="font-mono text-orange">TCK-{inc.id}</td>
                             <td className="font-mono">{inc.ordenId}</td>
                             <td>{new Date(inc.fecha).toLocaleString()}</td>
-                            <td><span className="badge badge-warning">{inc.tipoEvento?.replace('INCIDENCIA_', '')}</span></td>
+                            <td>
+                              <span className={`badge ${inc.tipoEvento?.includes('credito') ? 'badge-orange' : 'badge-warning'}`}>
+                                {inc.tipoEvento?.replace('INCIDENCIA_', '').toUpperCase()}
+                              </span>
+                            </td>
                             <td style={{maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={inc.detalle}>{inc.detalle}</td>
                             <td>
                               <button 
