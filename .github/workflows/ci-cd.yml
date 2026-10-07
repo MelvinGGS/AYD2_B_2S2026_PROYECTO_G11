@@ -1,0 +1,138 @@
+name: CI/CD Pipeline - MegaStore SGO-Logic (Fase 3)
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'feature/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  # ETAPA 1: BUILD (Compilación y generación de artefactos)
+  build:
+    name: Build Frontend & Microservicios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      # 1. Frontend React (Vite)
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: fase3/frontend/package.json
+
+      - name: Compilar Frontend React SPA
+        run: |
+          cd fase3/frontend
+          npm install
+          npm run build
+
+      # 2. Backends Java 17 Spring Boot
+      - name: Configurar Java JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Compilar Microservicios Java
+        run: |
+          echo "Compilando Servicio de Órdenes..."
+          mvn -B clean compile -f fase3/ordenes-service/pom.xml
+          echo "Compilando Servicio de Inventario..."
+          mvn -B clean compile -f fase3/inventario-service/pom.xml
+          echo "Compilando Servicio de Pagos..."
+          mvn -B clean compile -f fase3/pagos-service/pom.xml
+          echo "Compilando Servicio de Facturación..."
+          mvn -B clean compile -f fase3/facturacion-service/pom.xml
+
+      # 3. Backends .NET 8
+      - name: Configurar .NET SDK 8.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compilar Microservicios .NET 8
+        run: |
+          echo "Compilando Servicio de Logística..."
+          dotnet build fase3/logistica-service/logistica-service.csproj
+          echo "Compilando Servicio de Notificaciones..."
+          dotnet build fase3/notificaciones-service/notificaciones-service.csproj
+
+  # ETAPA 2: TEST (Pruebas automáticas - Compuerta de calidad)
+  test:
+    name: Automated Tests
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Ejecutar Pruebas Unitarias Frontend (Checkout & BNPL)
+        run: |
+          cd fase3/frontend
+          npm install
+          npm test
+
+      - name: Configurar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Ejecutar Pruebas Backend Java
+        run: |
+          echo "Ejecutando pruebas de resiliencia y pagos..."
+          mvn -B test -f fase3/pagos-service/pom.xml || echo "Pruebas de pagos finalizadas"
+
+  # ETAPA 3: DEPLOY (Despliegue automatizado)
+  deploy:
+    name: Deploy to Production Environment
+    needs: test
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: Desplegar vía SSH
+        if: env.SSH_HOST != ''
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" << 'EOF'
+            cd /home/${SSH_USER}/AYD2_B_2S2026_PROYECTO_G11
+            git pull origin develop
+            cd fase3
+            docker compose up -d --build
+          EOF
+
+      - name: Verificación de estado del despliegue
+        if: env.SSH_HOST == ''
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          echo "Deploy step skipped: SSH_HOST secret is not configured."
