@@ -19,3 +19,12 @@ node_modules/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Private personal files
+extras/
+
+# Cypress outputs
+cypress/videos/
+**/cypress/videos/
+cypress/screenshots/
+**/cypress/screenshots/
