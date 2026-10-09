@@ -35,6 +35,15 @@ export const ConfirmacionPage = () => {
     return d.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   };
 
+  const esCreditoPropio = orden?.metodoPago === 'credito_propio' ||
+    orden?.metodoPago === 'CREDITO_PROPIO_30D' ||
+    (typeof orden?.metodoPago === 'string' && (
+      orden?.metodoPago.toLowerCase().includes('credito propio') ||
+      orden?.metodoPago.toLowerCase().includes('30 dias') ||
+      orden?.metodoPago.toLowerCase().includes('30 días') ||
+      orden?.metodoPago.toLowerCase().includes('bnpl')
+    ));
+
   return (
     <div className="app-container">
       {/* Header with Brand Logo */}
@@ -96,10 +105,10 @@ export const ConfirmacionPage = () => {
                 </div>
                 <div className="summary-line">
                   <span>Método de pago</span>
-                  <span>{orden?.metodoPago === 'credito_propio' ? 'Crédito Propio MegaStore (Paga en 30 días)' : (orden?.metodoPago || 'PayKlik')}</span>
+                  <span>{esCreditoPropio ? 'Crédito Propio MegaStore (Paga en 30 días)' : (orden?.metodoPago || 'PayKlik')}</span>
                 </div>
 
-                {orden?.metodoPago === 'credito_propio' && (
+                {esCreditoPropio && (
                   <div className="summary-line" style={{ color: 'var(--orange-primary)', fontSize: '0.85rem' }}>
                     <span>Condición crediticia</span>
                     <span>0% recargo — 30 días de gracia</span>
@@ -107,7 +116,7 @@ export const ConfirmacionPage = () => {
                 )}
                 
                 <div className="summary-line total-line">
-                  <span>{orden?.metodoPago === 'credito_propio' ? 'Total financiado a 30 días' : 'Total pagado'}</span>
+                  <span>{esCreditoPropio ? 'Total financiado a 30 días' : 'Total pagado'}</span>
                   <span className="total-highlight">${orden?.total ? Number(orden.total).toFixed(2) : '0.00'}</span>
                 </div>
               </div>
@@ -119,7 +128,7 @@ export const ConfirmacionPage = () => {
               <span>Entrega estimada: <strong>{getEstimatedDate()}</strong></span>
             </div>
 
-            {orden?.metodoPago === 'credito_propio' && (
+            {esCreditoPropio && (
               <div className="delivery-estimate-card" style={{ marginTop: '0.75rem', borderColor: 'rgba(255, 107, 0, 0.35)' }}>
                 <ShieldCheck size={20} className="icon-orange" />
                 <span>
