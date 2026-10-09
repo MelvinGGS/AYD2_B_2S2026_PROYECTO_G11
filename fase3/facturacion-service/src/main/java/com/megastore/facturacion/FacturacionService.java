@@ -152,7 +152,34 @@ public class FacturacionService {
         }
     }
 
-    // TAREA: Tarea programada AS/400
+    // // TAREA: Tarea programada AS/400
+    // @Scheduled(cron = "${app.erp.export-cron:0 */30 * * * *}")
+    // public void exportarResumenErpAS400() {
+    //     String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
+    //     String nombreArchivo = "resumen_erp_" + timestamp + ".csv";
+    //     try {
+    //         File dir = new File(uploadsDir);
+    //         if (!dir.exists()) dir.mkdirs();
+    //         File csvFile = new File(dir, nombreArchivo);
+
+    //         try (FileWriter writer = new FileWriter(csvFile)) {
+    //             writer.write("FECHA,ORDEN_ID,CANAL,TOTAL,NIT_EMISOR,AUTORIZACION_SAT\n");
+    //             List<Factura> facturas = facturaRepository.findAll();
+    //             if (facturas.isEmpty()) {
+    //                 writer.write(String.format("%s,ORD-SYNC,OMNICANAL,0.00,103849204,AS400-BATCH\n", LocalDateTime.now()));
+    //             } else {
+    //                 for (Factura f : facturas) {
+    //                     writer.write(String.format("%s,%s,OMNICANAL,%s,103849204,%s\n",
+    //                             f.getFechaEmision(), f.getOrdenId(), f.getTotal(), f.getAutorizacion()));
+    //                 }
+    //             }
+    //         }
+    //         System.out.println("[ERP AS/400 EXPORT] Archivo estructurado generado: " + nombreArchivo);
+    //     } catch (Exception e) {
+    //         System.err.println("Error exportando a ERP: " + e.getMessage());
+    //     }
+    // }
+    // TAREA: Tarea programada AS/400 (Extendida para BNPL 30 días)
     @Scheduled(cron = "${app.erp.export-cron:0 */30 * * * *}")
     public void exportarResumenErpAS400() {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
@@ -163,18 +190,25 @@ public class FacturacionService {
             File csvFile = new File(dir, nombreArchivo);
 
             try (FileWriter writer = new FileWriter(csvFile)) {
-                writer.write("FECHA,ORDEN_ID,CANAL,TOTAL,NIT_EMISOR,AUTORIZACION_SAT\n");
+                // Nueva cabecera con METODO_PAGO y PLAZO_DIAS
+                writer.write("FECHA,ORDEN_ID,CANAL,TOTAL,NIT_EMISOR,AUTORIZACION_SAT,METODO_PAGO,PLAZO_DIAS\n");
+                
                 List<Factura> facturas = facturaRepository.findAll();
                 if (facturas.isEmpty()) {
-                    writer.write(String.format("%s,ORD-SYNC,OMNICANAL,0.00,103849204,AS400-BATCH\n", LocalDateTime.now()));
+                    writer.write(String.format("%s,ORD-SYNC,OMNICANAL,0.00,103849204,AS400-BATCH,NA,0\n", LocalDateTime.now()));
                 } else {
                     for (Factura f : facturas) {
-                        writer.write(String.format("%s,%s,OMNICANAL,%s,103849204,%s\n",
-                                f.getFechaEmision(), f.getOrdenId(), f.getTotal(), f.getAutorizacion()));
+                        // Para la Fase 3, inferimos si fue crédito a 30 días o pago de contado (PayKlik)
+                        // Si la BD de factura se actualiza luego con metodoPago, leerlo de f.getMetodoPago()
+                        String metodoPago = "CREDITO_PROPIO_30D"; // Simulación/Mock del método
+                        int plazoDias = "CREDITO_PROPIO_30D".equals(metodoPago) ? 30 : 0;
+                        
+                        writer.write(String.format("%s,%s,OMNICANAL,%s,103849204,%s,%s,%d\n",
+                                f.getFechaEmision(), f.getOrdenId(), f.getTotal(), f.getAutorizacion(), metodoPago, plazoDias));
                     }
                 }
             }
-            System.out.println("[ERP AS/400 EXPORT] Archivo estructurado generado: " + nombreArchivo);
+            System.out.println("[ERP AS/400 EXPORT] Archivo BNPL estructurado generado: " + nombreArchivo);
         } catch (Exception e) {
             System.err.println("Error exportando a ERP: " + e.getMessage());
         }
