@@ -99,7 +99,7 @@ jobs:
       - name: Ejecutar Pruebas Backend Java
         run: |
           echo "Ejecutando pruebas de resiliencia y pagos..."
-          mvn -B test -f fase3/pagos-service/pom.xml || echo "Pruebas de pagos finalizadas"
+          mvn -B test -f fase3/pagos-service/pom.xml
 
   # ETAPA 3: DEPLOY (Despliegue automatizado)
   deploy:

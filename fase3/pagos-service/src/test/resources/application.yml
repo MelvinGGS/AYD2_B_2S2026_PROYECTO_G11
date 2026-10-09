@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      payklikService:
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+app:
+  payklik:
+    url: http://localhost:8083/api/payklik/cobrar
+  rabbitmq:
+    exchange: sgologic.exchange
+    queue-pago: pagos.queue
+    queue-dlq: pagos.dlq
+    routing-key-pago-confirmado: pago.confirmado

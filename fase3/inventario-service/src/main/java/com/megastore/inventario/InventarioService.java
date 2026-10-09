@@ -91,6 +91,9 @@ public class InventarioService {
                 if (ordenData.get("direccion") != null) eventoRespuesta.put("direccion", ordenData.get("direccion"));
                 if (ordenData.get("direccionDestino") != null) eventoRespuesta.put("direccionDestino", ordenData.get("direccionDestino"));
                 if (ordenData.get("numeroTarjeta") != null) eventoRespuesta.put("numeroTarjeta", ordenData.get("numeroTarjeta"));
+                if (ordenData.get("metodoPago") != null) eventoRespuesta.put("metodoPago", ordenData.get("metodoPago"));
+                if (ordenData.get("plazoDias") != null) eventoRespuesta.put("plazoDias", ordenData.get("plazoDias"));
+                if (ordenData.get("cliente") != null) eventoRespuesta.put("cliente", ordenData.get("cliente"));
 
                 rabbitTemplate.convertAndSend(exchangeName, routingKeyReservado, eventoRespuesta);
                 System.out.println("[INVENTARIO] EXITO: Stock reservado (15 min). Evento 'inventario.reservado' publicado.");
@@ -135,6 +138,29 @@ public class InventarioService {
                 }
             }
             System.out.println("[EXPIRACION RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada y devuelta a stock para orden " + r.getOrdenId());
+        }
+    }
+
+    @org.springframework.amqp.rabbit.annotation.RabbitListener(queues = "${app.rabbitmq.queue-cancelacion:inventario.cancelacion.queue}")
+    @Transactional
+    public void procesarOrdenCancelada(Map<String, Object> evento) {
+        if (evento == null || !evento.containsKey("ordenId")) return;
+        String ordenId = (String) evento.get("ordenId");
+        System.out.println("[INVENTARIO] Procesando liberacion de stock por orden cancelada: " + ordenId);
+        List<Reserva> reservas = reservaRepository.findByOrdenIdAndActivaTrue(ordenId);
+        for (Reserva r : reservas) {
+            r.setActiva(false);
+            reservaRepository.save(r);
+            List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
+            if (stocks != null) {
+                for (Stock s : stocks) {
+                    if (s.getUbicacion().getId().equals(r.getUbicacionId())) {
+                        s.setCantidad(s.getCantidad() + r.getCantidad());
+                        stockRepository.save(s);
+                        break;
+                    }
+                }
+            }
         }
     }
 }

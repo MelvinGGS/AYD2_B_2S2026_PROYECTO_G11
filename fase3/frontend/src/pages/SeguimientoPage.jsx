@@ -255,11 +255,13 @@ export const SeguimientoPage = () => {
                 <div className="detail-item">
                   <span className="detail-label">Método de pago</span>
                   <span className="detail-val">
-                    {orden.metodoPago === 'credito_propio' ? 'Crédito Propio (Paga en 30 días)' : (orden.metodoPago || 'Transferencia bancaria')}
+                    {(orden.metodoPago === 'credito_propio' || orden.metodoPago === 'CREDITO_PROPIO_30D' || (typeof orden.metodoPago === 'string' && (orden.metodoPago.toLowerCase().includes('credito propio') || orden.metodoPago.toLowerCase().includes('30 dias') || orden.metodoPago.toLowerCase().includes('bnpl'))))
+                      ? 'Crédito Propio (Paga en 30 días)'
+                      : (orden.metodoPago || 'Transferencia bancaria')}
                   </span>
                 </div>
 
-                {orden.metodoPago === 'credito_propio' && (
+                {(orden.metodoPago === 'credito_propio' || orden.metodoPago === 'CREDITO_PROPIO_30D' || (typeof orden.metodoPago === 'string' && (orden.metodoPago.toLowerCase().includes('credito propio') || orden.metodoPago.toLowerCase().includes('30 dias') || orden.metodoPago.toLowerCase().includes('bnpl')))) && (
                   <div className="detail-item">
                     <span className="detail-label">Vencimiento del crédito</span>
                     <span className="detail-val font-bold" style={{ color: 'var(--orange-primary)' }}>

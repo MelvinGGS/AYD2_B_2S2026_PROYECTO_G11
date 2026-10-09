@@ -7,6 +7,7 @@ namespace NotificacionesService
 {
     public class NotificationLog
     {
+        public long Id { get; set; }
         public string Evento { get; set; } = string.Empty;
         public string Contenido { get; set; } = string.Empty;
         public DateTime Fecha { get; set; } = DateTime.UtcNow;
@@ -17,6 +18,7 @@ namespace NotificacionesService
         private readonly ILogger<RabbitMQConsumerService> _logger;
         private readonly IConfiguration _configuration;
         private static readonly List<NotificationLog> LogsMemory = new();
+        private static long _contadorId = 0;
 
         public RabbitMQConsumerService(ILogger<RabbitMQConsumerService> logger, IConfiguration configuration)
         {
@@ -24,7 +26,21 @@ namespace NotificacionesService
             _configuration = configuration;
         }
 
-        public static List<NotificationLog> GetLogs() => LogsMemory.OrderByDescending(x => x.Fecha).Take(50).ToList();
+        public static List<NotificationLog> GetLogs()
+        {
+            lock (LogsMemory)
+            {
+                return LogsMemory.OrderByDescending(x => x.Id).Take(50).ToList();
+            }
+        }
+
+        public static List<NotificationLog> GetLogsSince(long lastId)
+        {
+            lock (LogsMemory)
+            {
+                return LogsMemory.Where(x => x.Id > lastId).OrderBy(x => x.Id).ToList();
+            }
+        }
 
         public static void RegistrarNotificacion(string evento, string contenido)
         {
@@ -32,6 +48,7 @@ namespace NotificacionesService
             {
                 LogsMemory.Add(new NotificationLog
                 {
+                    Id = Interlocked.Increment(ref _contadorId),
                     Evento = evento,
                     Contenido = contenido,
                     Fecha = DateTime.UtcNow
@@ -89,6 +106,7 @@ namespace NotificacionesService
                         {
                             LogsMemory.Add(new NotificationLog
                             {
+                                Id = Interlocked.Increment(ref _contadorId),
                                 Evento = routingKey,
                                 Contenido = message,
                                 Fecha = DateTime.UtcNow
