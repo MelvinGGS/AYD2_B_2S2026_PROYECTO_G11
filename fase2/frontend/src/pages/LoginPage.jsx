@@ -1,19 +1,34 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, LogIn, Store, ShieldCheck, UserCheck, Headphones, UserPlus, CheckCircle2 } from 'lucide-react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { Mail, Lock, LogIn, Store, ShieldCheck, UserCheck, Headphones, UserPlus, CheckCircle2, Phone, MapPin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect');
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForgotMsg, setShowForgotMsg] = useState(false);
   const [regSuccess, setRegSuccess] = useState(false);
 
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const navigate = useNavigate();
+
+  const resolveDestination = (userObj, requestedRedirect) => {
+    if (userObj?.role === 'admin') {
+      return requestedRedirect || '/admin/dashboard';
+    }
+    // If not admin, ignore any /admin redirect
+    if (requestedRedirect && !requestedRedirect.includes('/admin')) {
+      return requestedRedirect;
+    }
+    return '/catalogo';
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,38 +37,48 @@ export const LoginPage = () => {
       setLoading(true);
       try {
         const userObj = await login(email, password);
-        if (userObj.role === 'admin') {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/catalogo');
-        }
+        const destination = resolveDestination(userObj, redirectUrl);
+        navigate(destination);
       } catch (err) {
         console.error('Login error', err);
       } finally {
         setLoading(false);
       }
     } else {
-      // Mock Register
+      if (!name || !email || !password) return;
       setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
+      try {
+        const userObj = await register({
+          nombre: name,
+          email,
+          password,
+          telefono: phone,
+          direccion: address
+        });
         setRegSuccess(true);
         setTimeout(() => {
-          setRegSuccess(false);
-          setActiveTab('login');
-        }, 2000);
-      }, 500);
+          const destination = resolveDestination(userObj, redirectUrl);
+          navigate(destination);
+        }, 1200);
+      } catch (err) {
+        console.error('Register error', err);
+        alert(err.message || 'Error al registrarse');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const handleQuickLogin = (type) => {
     if (type === 'cliente') {
-      login('cliente@megastore.com', 'cliente123').then(() => {
-        navigate('/catalogo');
+      login('cliente@megastore.com', 'Password123').then((userObj) => {
+        const destination = resolveDestination(userObj, redirectUrl);
+        navigate(destination);
       });
     } else if (type === 'admin') {
-      login('admin.ops@megastore.com', 'admin123').then(() => {
-        navigate('/admin/dashboard');
+      login('admin@megastore.com', 'Admin123').then((userObj) => {
+        const destination = resolveDestination(userObj, redirectUrl);
+        navigate(destination);
       });
     }
   };
@@ -131,6 +156,7 @@ export const LoginPage = () => {
                 placeholder="tu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
                 required
               />
             </div>
@@ -158,10 +184,43 @@ export const LoginPage = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete={activeTab === 'login' ? 'current-password' : 'new-password'}
                 required
               />
             </div>
           </div>
+
+          {activeTab === 'register' && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Teléfono de contacto (Opcional)</label>
+                <div className="input-icon-wrapper">
+                  <Phone className="field-icon" size={18} />
+                  <input
+                    type="text"
+                    className="form-input with-icon"
+                    placeholder="Ej. +502 5555 1234"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Dirección de entrega (Opcional)</label>
+                <div className="input-icon-wrapper">
+                  <MapPin className="field-icon" size={18} />
+                  <input
+                    type="text"
+                    className="form-input with-icon"
+                    placeholder="Ej. Avenida Reforma 12-01, Zona 10, Ciudad de Guatemala"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <button type="submit" className="btn-primary btn-block" disabled={loading}>
             {loading ? 'Procesando...' : activeTab === 'login' ? 'Ingresar' : 'Crear Cuenta'}

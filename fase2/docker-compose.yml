@@ -1,7 +1,14 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16
     container_name: sgologic-postgres
+    logging: *default-logging
     environment:
       POSTGRES_DB: sgologic
       POSTGRES_USER: sgologic
@@ -19,6 +26,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: sgologic-redis
+    logging: *default-logging
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
@@ -31,6 +39,7 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: sgologic-rabbitmq
+    logging: *default-logging
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -46,6 +55,7 @@ services:
   ordenes-service:
     build: ./ordenes-service
     container_name: sgologic-ordenes
+    logging: *default-logging
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
       SPRING_DATASOURCE_USERNAME: sgologic
@@ -66,6 +76,7 @@ services:
   facturacion-service:
     build: ./facturacion-service
     container_name: sgologic-facturacion
+    logging: *default-logging
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
       SPRING_DATASOURCE_USERNAME: sgologic
@@ -85,6 +96,7 @@ services:
   pagos-service:
     build: ./pagos-service
     container_name: sgologic-pagos
+    logging: *default-logging
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
       SPRING_DATASOURCE_USERNAME: sgologic
@@ -102,6 +114,7 @@ services:
   notificaciones-service:
     build: ./notificaciones-service
     container_name: sgologic-notificaciones
+    logging: *default-logging
     environment:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: 5672
@@ -114,6 +127,7 @@ services:
   frontend:
     build: ./frontend
     container_name: sgologic-frontend
+    logging: *default-logging
     ports:
       - "3000:3000"
     depends_on:
@@ -123,6 +137,7 @@ services:
   inventario-service:
     build: ./inventario-service
     container_name: sgologic-inventario
+    logging: *default-logging
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sgologic
       SPRING_DATASOURCE_USERNAME: sgologic
@@ -131,6 +146,23 @@ services:
       SPRING_RABBITMQ_PORT: 5672
     ports:
       - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+  logistica-service:
+    build: ./logistica-service
+    container_name: sgologic-logistica
+    logging: *default-logging
+    environment:
+      ConnectionStrings__PostgreSQL: "Host=postgres;Port=5432;Database=sgologic;Username=sgologic;Password=sgologic2026"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: guest
+      RabbitMQ__Password: guest
+    ports:
+      - "8085:8085"
     depends_on:
       postgres:
         condition: service_healthy

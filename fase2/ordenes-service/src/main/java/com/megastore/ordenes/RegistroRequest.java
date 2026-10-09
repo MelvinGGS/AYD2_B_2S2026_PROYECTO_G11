@@ -5,6 +5,8 @@ public class RegistroRequest {
     private String email;
     private String password;
     private String canalPreferido;
+    private String telefono;
+    private String direccion;
 
     public RegistroRequest() {}
 
@@ -16,4 +18,8 @@ public class RegistroRequest {
     public void setPassword(String password) { this.password = password; }
     public String getCanalPreferido() { return canalPreferido; }
     public void setCanalPreferido(String canalPreferido) { this.canalPreferido = canalPreferido; }
+    public String getTelefono() { return telefono; }
+    public void setTelefono(String telefono) { this.telefono = telefono; }
+    public String getDireccion() { return direccion; }
+    public void setDireccion(String direccion) { this.direccion = direccion; }
 }

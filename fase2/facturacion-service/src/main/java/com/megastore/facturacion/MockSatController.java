@@ -3,27 +3,24 @@ package com.megastore.facturacion;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.Random;
+
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/mock/sat")
+@RequestMapping({"/api/sat", "/mock/sat"})
+@CrossOrigin(origins = "*")
 public class MockSatController {
 
     @PostMapping("/validar")
-    public ResponseEntity<String> validarXml(@RequestBody String xmlDte) throws InterruptedException {
-        int probabilidad = new Random().nextInt(100);
-        
-        // 20% de probabilidad de Timeout (tarda 5 segundos y falla)
-        if (probabilidad < 20) {
-            Thread.sleep(5000); 
-            return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body("Error: SAT no responde (Timeout)");
+    public ResponseEntity<String> validarXml(@RequestBody(required = false) String xmlDte) {
+        if (xmlDte == null || xmlDte.isBlank() || !xmlDte.contains("<DTE") || !xmlDte.contains("</DTE>")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Error: Estructura DTE XML no valida segun estandar FEL SAT.");
         }
-        // 10% de probabilidad de Rechazo / Error Interno
-        else if (probabilidad < 30) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: XML inválido o SAT caída");
-        }
-        
-        // 70% de probabilidad de Éxito
-        return ResponseEntity.ok("DTE Autorizado exitosamente por la SAT");
+
+        String autorizacionSat = "SAT-FEL-" + UUID.randomUUID().toString().substring(0, 10).toUpperCase();
+        System.out.println("[SAT CERTIFICADOR FEL] DTE validado y certificado con exito. Autorizacion: " + autorizacionSat);
+
+        return ResponseEntity.ok("DTE Autorizado exitosamente por la SAT Superintendencia de Administracion Tributaria. Autorizacion FEL: " + autorizacionSat);
     }
 }

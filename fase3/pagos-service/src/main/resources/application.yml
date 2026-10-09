@@ -1,0 +1,43 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: pagos-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/sgologic}
+    username: ${SPRING_DATASOURCE_USERNAME:sgologic}
+    password: ${SPRING_DATASOURCE_PASSWORD:sgologic2026}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      payklikService:
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+app:
+  payklik:
+    url: ${APP_PAYKLIK_URL:http://localhost:8083/api/payklik/cobrar}
+  rabbitmq:
+    exchange: sgologic.exchange
+    queue-pago: pagos.queue
+    queue-dlq: pagos.dlq
+    routing-key-pago-confirmado: pago.confirmado

@@ -4,6 +4,7 @@ using LogisticaService.Services;
 using LogisticaService.Consumers;
 using Microsoft.EntityFrameworkCore;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
@@ -27,8 +28,34 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<LogisticaDbContext>();
-    dbContext.Database.Migrate();
+    try
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<LogisticaDbContext>();
+        dbContext.Database.ExecuteSqlRaw(@"
+            CREATE TABLE IF NOT EXISTS ""Despachos"" (
+                ""Id"" text PRIMARY KEY,
+                ""OrdenId"" text NOT NULL,
+                ""UbicacionOrigen"" text NOT NULL,
+                ""DireccionDestino"" text NOT NULL,
+                ""CodigoRastreo"" text NOT NULL,
+                ""Estado"" text NOT NULL,
+                ""FechaCreacion"" timestamp with time zone NOT NULL,
+                ""FechaEntrega"" timestamp with time zone
+            );
+            CREATE TABLE IF NOT EXISTS ""Rastreos"" (
+                ""Id"" text PRIMARY KEY,
+                ""CodigoRastreo"" text NOT NULL,
+                ""Estado"" text NOT NULL,
+                ""UbicacionActual"" text NOT NULL,
+                ""Timestamp"" timestamp with time zone NOT NULL
+            );
+        ");
+        Console.WriteLine("[LOGISTICA DB] Tablas Despachos y Rastreos verificadas/creadas con exito.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[LOGISTICA DB] Inicializacion: {ex.Message}");
+    }
 }
 
 app.UseCors("AllowAll");

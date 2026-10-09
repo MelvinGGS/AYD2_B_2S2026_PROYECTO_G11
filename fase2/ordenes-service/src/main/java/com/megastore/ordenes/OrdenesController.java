@@ -33,4 +33,26 @@ public class OrdenesController {
     public ResponseEntity<List<Orden>> listarTodas() {
         return ResponseEntity.ok(ordenesService.listarTodas());
     }
+
+    @PatchMapping("/{id}/estado")
+    public ResponseEntity<Orden> actualizarEstado(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
+        String nuevoEstado = body.get("estado");
+        if (nuevoEstado != null) {
+            ordenesService.actualizarEstadoOrden(id, nuevoEstado);
+        }
+        return ordenesService.obtenerOrdenPorId(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{id}/incidencias")
+    public ResponseEntity<?> registrarIncidencia(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
+        String tipo = body.getOrDefault("tipo", "CONSULTA");
+        String detalle = body.getOrDefault("detalle", "Incidencia de atención al cliente");
+        ordenesService.registrarIncidencia(id, tipo, detalle);
+        return ResponseEntity.ok(java.util.Map.of("status", "REGISTRADA", "ordenId", id, "tipo", tipo));
+    }
+
+    @GetMapping("/incidencias")
+    public ResponseEntity<List<EventoAuditoria>> listarIncidencias() {
+        return ResponseEntity.ok(ordenesService.listarIncidencias());
+    }
 }

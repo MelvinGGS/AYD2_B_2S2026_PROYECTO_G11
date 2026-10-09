@@ -24,6 +24,10 @@ public class Cliente {
 
     private String rol;
 
+    private String telefono;
+
+    private String direccion;
+
     private LocalDateTime fechaRegistro;
 
     public Cliente() {
@@ -53,6 +57,10 @@ public class Cliente {
     public void setCanalPreferido(String canalPreferido) { this.canalPreferido = canalPreferido; }
     public String getRol() { return rol; }
     public void setRol(String rol) { this.rol = rol; }
+    public String getTelefono() { return telefono; }
+    public void setTelefono(String telefono) { this.telefono = telefono; }
+    public String getDireccion() { return direccion; }
+    public void setDireccion(String direccion) { this.direccion = direccion; }
     public LocalDateTime getFechaRegistro() { return fechaRegistro; }
     public void setFechaRegistro(LocalDateTime fechaRegistro) { this.fechaRegistro = fechaRegistro; }
 }

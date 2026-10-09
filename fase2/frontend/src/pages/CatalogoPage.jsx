@@ -27,21 +27,23 @@ export const CatalogoPage = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
-      const data = await getProductos(urlQuery, selectedCategory === 'Todas' ? '' : selectedCategory);
+      const data = await getProductos({
+        q: urlQuery,
+        categoria: selectedCategory === 'Todas' ? '' : selectedCategory,
+        ofertas: onlyOfertas,
+        maxPrecio: maxPrice,
+        enStock: inStockOnly
+      });
       setProducts(data);
       setLoading(false);
     };
     fetchProducts();
-  }, [urlQuery, selectedCategory]);
+  }, [urlQuery, selectedCategory, onlyOfertas, maxPrice, inStockOnly]);
 
   const categories = ['Todas', 'Línea Blanca', 'Electrónica', 'Ropa', 'Calzado'];
 
-  const filteredProducts = products.filter(p => {
-    if (onlyOfertas && !p.precioAnterior) return false;
-    if (inStockOnly && p.stock <= 0) return false;
-    if (maxPrice && p.precio > parseFloat(maxPrice)) return false;
-    return true;
-  });
+  // El filtrado se ejecuta 100% del lado del backend (inventario-service)
+  const filteredProducts = products;
 
   return (
     <div className="app-container">
@@ -131,7 +133,7 @@ export const CatalogoPage = () => {
           <section className="products-section">
             <div className="section-header">
               <h2>
-                {onlyOfertas ? '🔥 Ofertas Especiales Black Friday' : selectedCategory === 'Todas' ? 'Todos los Productos' : selectedCategory}
+                {onlyOfertas ? 'Ofertas Especiales Black Friday' : selectedCategory === 'Todas' ? 'Todos los Productos' : selectedCategory}
                 {urlQuery && <span className="search-query-label"> — Resultados para "{urlQuery}"</span>}
               </h2>
               <span className="results-count">{filteredProducts.length} productos encontrados</span>

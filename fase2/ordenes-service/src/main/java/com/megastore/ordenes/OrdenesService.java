@@ -39,7 +39,7 @@ public class OrdenesService {
         
         Orden orden = new Orden();
         orden.setId(ordenId);
-        orden.setClienteId(request.getClienteId() != null ? request.getClienteId() : "usr-demo");
+        orden.setClienteId(request.getClienteId() != null ? request.getClienteId() : "1");
         orden.setClienteNombre(request.getClienteNombre() != null ? request.getClienteNombre() : "Cliente Omnicanal");
         orden.setCanal(request.getCanal() != null ? request.getCanal() : "Web Store");
         orden.setEstado("CREADA");
@@ -90,12 +90,24 @@ public class OrdenesService {
         try {
             Map<String, Object> evento = new HashMap<>();
             evento.put("id", guardada.getId());
+            evento.put("ordenId", guardada.getId());
             evento.put("cliente", guardada.getClienteNombre());
             evento.put("total", guardada.getTotal());
+            evento.put("monto", guardada.getTotal());
             evento.put("canal", guardada.getCanal());
+            evento.put("direccion", guardada.getDireccion());
+            evento.put("direccionDestino", guardada.getDireccion());
             evento.put("estado", guardada.getEstado());
             evento.put("codigoRastreo", guardada.getCodigoRastreo());
             evento.put("fecha", guardada.getFechaCreacion().toString());
+            if (guardada.getItems() != null && !guardada.getItems().isEmpty()) {
+                String pId = guardada.getItems().get(0).getProductoId();
+                evento.put("productoId", (pId != null && !pId.isBlank()) ? pId : "PROD-001");
+                evento.put("cantidad", guardada.getItems().get(0).getCantidad() != null ? guardada.getItems().get(0).getCantidad() : 1);
+            } else {
+                evento.put("productoId", "PROD-001");
+                evento.put("cantidad", 1);
+            }
 
             rabbitTemplate.convertAndSend(exchangeName, routingKeyOrdenCreada, evento);
         } catch (Exception e) {
@@ -111,5 +123,44 @@ public class OrdenesService {
 
     public List<Orden> listarTodas() {
         return ordenRepository.findAllByOrderByFechaCreacionDesc();
+    }
+
+    @org.springframework.amqp.rabbit.annotation.RabbitListener(queues = "${app.rabbitmq.queue-ordenes-status:ordenes.status.queue}")
+    public void recibirActualizacionOrden(Map<String, Object> evento) {
+        try {
+            String ordenId = evento.containsKey("ordenId") ? (String) evento.get("ordenId") : (String) evento.get("id");
+            if (ordenId != null) {
+                String nuevoEstado = evento.containsKey("autorizacionSat") ? "EN_PREPARACION" : 
+                    (evento.containsKey("estado") ? evento.get("estado").toString() : "PROCESANDO");
+                actualizarEstadoOrden(ordenId, nuevoEstado);
+            }
+        } catch (Exception e) {
+            System.err.println("Error actualizando estado de orden: " + e.getMessage());
+        }
+    }
+
+    public void actualizarEstadoOrden(String ordenId, String nuevoEstado) {
+        ordenRepository.findById(ordenId).ifPresent(orden -> {
+            orden.setEstado(nuevoEstado);
+            ordenRepository.save(orden);
+            System.out.println("[ORDENES] Estado de orden " + ordenId + " actualizado en BD a: " + nuevoEstado);
+        });
+    }
+
+    public void registrarIncidencia(String ordenId, String tipo, String detalle) {
+        String tipoNorm = tipo != null ? tipo.toUpperCase() : "CONSULTA";
+        String detalleNorm = detalle != null ? detalle : "Incidencia de atención al cliente";
+        EventoAuditoria aud = new EventoAuditoria(
+                ordenId,
+                "CALL_CENTER",
+                "INCIDENCIA_" + tipoNorm,
+                detalleNorm
+        );
+        auditoriaRepository.save(aud);
+        System.out.println("[AUDITORIA ATENCION] Incidencia registrada para orden " + ordenId + ": " + tipoNorm);
+    }
+
+    public List<EventoAuditoria> listarIncidencias() {
+        return auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("INCIDENCIA");
     }
 }

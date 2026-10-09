@@ -1,7 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["logistica-service.csproj", "./"]
-RUN dotnet restore "logistica-service.csproj"
+RUN dotnet restore "logistica-service.csproj" --no-cache
 COPY . .
 RUN dotnet publish "logistica-service.csproj" -c Release -o /app/publish
 

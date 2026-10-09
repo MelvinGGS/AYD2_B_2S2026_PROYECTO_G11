@@ -139,32 +139,82 @@ const MOCK_ORDERS = [
     ]
   }
 ];
+const INVENTARIO_API = (typeof process !== 'undefined' && process.env?.REACT_APP_INVENTARIO_API)
+  ? process.env.REACT_APP_INVENTARIO_API
+  : (import.meta.env?.VITE_INVENTARIO_API || 'http://localhost:8082/api/inventario');
 
-const INVENTARIO_API = process.env.REACT_APP_INVENTARIO_API || 'http://localhost:8082/api/inventario';
+const PRODUCT_IMAGE_FALLBACKS = {
+  'prod-001': 'https://images.unsplash.com/photo-1517668808822-9efe02eae25c?auto=format&fit=crop&w=600&q=80',
+  'prod-002': 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&q=80',
+  'prod-003': 'https://images.unsplash.com/photo-1616401784845-180882ba9ba8?auto=format&fit=crop&w=600&q=80',
+  'prod-004': 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=600&q=80',
+  'prod-005': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80',
+  'prod-006': 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&q=80',
+  'prod-007': 'https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=600&q=80',
+  'prod-008': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80',
+  'PROD-001': 'https://images.unsplash.com/photo-1626806787461-102c1bfaaea1?auto=format&fit=crop&w=600&q=80',
+  'PROD-002': 'https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?auto=format&fit=crop&w=600&q=80',
+  'PROD-003': 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&q=80',
+  'PROD-004': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80'
+};
 
-export const getProductos = async (query = '', categoria = '') => {
+export const getCategoryImage = (cat = '') => {
+  const c = (cat || '').toLowerCase();
+  if (c.includes('blanca')) return 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&w=600&q=80';
+  if (c.includes('electr')) return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80';
+  if (c.includes('ropa')) return 'https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=600&q=80';
+  if (c.includes('calzado')) return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80';
+  return 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80';
+};
+
+export const getProductos = async (filtrosOQuery = '', categoriaParam = '') => {
   try {
-    let url = `${INVENTARIO_API}/productos`;
-    if (categoria && categoria !== 'Todas') {
-      url += `?categoria=${encodeURIComponent(categoria)}`;
+    let q = '';
+    let categoria = '';
+    let ofertas = false;
+    let maxPrecio = '';
+    let enStock = false;
+
+    if (typeof filtrosOQuery === 'object' && filtrosOQuery !== null) {
+      q = filtrosOQuery.q || '';
+      categoria = filtrosOQuery.categoria || '';
+      ofertas = !!filtrosOQuery.ofertas;
+      maxPrecio = filtrosOQuery.maxPrecio || '';
+      enStock = !!filtrosOQuery.enStock;
+    } else {
+      q = filtrosOQuery || '';
+      categoria = categoriaParam || '';
     }
+
+    const params = new URLSearchParams();
+    if (q && q.trim()) params.append('q', q.trim());
+    if (categoria && categoria !== 'Todas') params.append('categoria', categoria.trim());
+    if (ofertas) params.append('ofertas', 'true');
+    if (maxPrecio) params.append('maxPrecio', maxPrecio);
+    if (enStock) params.append('enStock', 'true');
+
+    const qs = params.toString();
+    const url = `${INVENTARIO_API}/productos${qs ? `?${qs}` : ''}`;
     
     const res = await fetch(url);
     if (res.ok) {
-      let data = await res.json();
-      // Como nuestro backend aún no filtra por query de texto, lo hacemos en frontend
-      if (query.trim()) {
-        const q = query.toLowerCase();
-        // Fallback p.descripcion si no viene del backend, por compatibilidad con el mock
-        data = data.filter(p => 
-          p.nombre.toLowerCase().includes(q) || 
-          (p.descripcion && p.descripcion.toLowerCase().includes(q))
-        );
-      }
-      return data;
+      const data = await res.json();
+      return data.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        precio: Number(p.precio) || 0,
+        precioAnterior: p.precioAnterior ? Number(p.precioAnterior) : undefined,
+        categoria: p.categoria || 'General',
+        descripcion: p.descripcion || `${p.nombre} con garantía oficial MegaStore SGO-Logic.`,
+        imagen: p.imagen || PRODUCT_IMAGE_FALLBACKS[p.id] || getCategoryImage(p.categoria),
+        stock: p.stock ?? 25,
+        tag: p.tag || 'Disponible',
+        tagType: p.tagType || (p.tag && p.tag.includes('Black Friday') ? 'orange' : 'info'),
+        rating: p.rating || 4.8
+      }));
     }
   } catch (e) {
-    console.warn('Backend Inventario offline, utilizando catálogo mock...');
+    console.warn('Backend Inventario offline, utilizando catálogo de respaldo...');
   }
 
   let result = [...INITIAL_PRODUCTS];
@@ -188,27 +238,141 @@ export const loginUser = async (email, password) => {
     if (res.ok) {
       return await res.json();
     }
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Credenciales invalidas');
   } catch (e) {
-    console.warn('Backend Spring Boot offline, utilizando respuesta mock...');
+    console.error('Error de autenticacion:', e);
+    throw e;
   }
+};
 
-  const isAdmin = email.includes('admin');
+export const registerUser = async (userData) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/clientes/registro`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al registrar usuario');
+  } catch (e) {
+    console.error('Error en registro:', e);
+    throw e;
+  }
+};
+
+export const actualizarPerfilCliente = async (id, perfilData) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/clientes/${id}/perfil`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(perfilData)
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al actualizar perfil');
+  } catch (e) {
+    console.error('Error al actualizar perfil:', e);
+    throw e;
+  }
+};
+
+export const getInventarioUnificado = async () => {
+  try {
+    const res = await fetch(`${INVENTARIO_API}/unificado`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('No se pudo obtener inventario unificado del backend:', e);
+  }
+  return [];
+};
+
+export const getClientes = async () => {
+  try {
+    const res = await fetch(`${ORDENES_API}/clientes`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('No se pudo obtener lista de clientes del backend:', e);
+  }
+  return [];
+};
+
+export const normalizeOrder = (raw) => {
+  if (!raw) return null;
+  const cliente = raw.clienteNombre || raw.cliente || 'Cliente Omnicanal';
+  const fecha = raw.fechaCreacion || raw.fecha || new Date().toISOString();
+  const items = Array.isArray(raw.items)
+    ? raw.items.map((it) => {
+        const precioUnitario = Number(it.precioUnitario != null ? it.precioUnitario : it.precio) || 0;
+        const cantidad = Number(it.cantidad) || 1;
+        const nombre = it.nombreProducto || it.nombre || 'Producto MegaStore';
+        return {
+          ...it,
+          id: it.id || it.productoId,
+          productoId: it.productoId || it.id,
+          nombre,
+          nombreProducto: nombre,
+          precio: precioUnitario,
+          precioUnitario,
+          cantidad,
+          subtotal: Number(it.subtotal) || +(precioUnitario * cantidad).toFixed(2)
+        };
+      })
+    : [];
+
   return {
-    id: 'usr-101',
-    nombre: isAdmin ? 'Administrador Ops' : 'Usuario Cliente',
-    email,
-    role: isAdmin ? 'admin' : 'cliente',
-    token: 'mock-jwt-token-sgo-logic-2026'
+    ...raw,
+    cliente,
+    clienteNombre: cliente,
+    fecha,
+    fechaCreacion: fecha,
+    subtotal: Number(raw.subtotal) || 0,
+    impuestos: Number(raw.impuestos) || 0,
+    envio: Number(raw.envio) || 0,
+    total: Number(raw.total) || 0,
+    items,
+    timeline: raw.timeline || buildTimeline(raw.estado)
   };
 };
 
 export const crearOrden = async (carrito, shippingInfo, paymentInfo) => {
+  // Pre-validar disponibilidad de inventario antes de crear la orden
+  for (const item of carrito) {
+    try {
+      const res = await fetch(`${INVENTARIO_API}/disponibilidad/${item.id}`);
+      if (res.ok) {
+        const stockData = await res.json();
+        const totalDisp = stockData.reduce((sum, u) => sum + u.cantidadDisponible, 0);
+        if (totalDisp < item.cantidad) {
+          throw new Error(`Inventario insuficiente para "${item.nombre}". Disponible: ${totalDisp}, solicitado: ${item.cantidad}.`);
+        }
+      } else if (res.status === 404) {
+        throw new Error(`Producto "${item.nombre}" no encontrado en inventario.`);
+      }
+    } catch (e) {
+      if (e.message.includes('Inventario insuficiente') || e.message.includes('no encontrado')) {
+        throw e; // Abortar la creación de la orden
+      }
+      // Si el servicio de inventario está caído, dejamos pasar (el backend validará asincrónicamente)
+      console.warn('No se pudo pre-validar inventario:', e.message);
+    }
+  }
+
   const payload = {
-    clienteId: 'usr-101',
+    clienteId: shippingInfo.clienteId || '1',
     clienteNombre: shippingInfo.nombreCompleto || 'Cliente Omnicanal',
     canal: 'Web Store',
-    metodoPago: paymentInfo.metodo === 'payklik' ? 'PayKlik (Tarjeta de Crédito)' : 'Transferencia bancaria',
-    metodoEntrega: shippingInfo.tipoEntrega === 'domicilio' ? 'Envío a Domicilio' : 'Recogida en Tienda',
+    metodoPago: paymentInfo.metodo === 'payklik' ? 'PayKlik (Tarjeta de Credito)' : 'Transferencia bancaria',
+    metodoEntrega: shippingInfo.tipoEntrega === 'domicilio' ? 'Envio a Domicilio' : 'Recogida en Tienda',
     direccion: shippingInfo.direccion || 'Ciudad de Guatemala',
     items: carrito.map(item => ({
       id: item.id,
@@ -220,121 +384,149 @@ export const crearOrden = async (carrito, shippingInfo, paymentInfo) => {
     }))
   };
 
-  try {
-    const res = await fetch(`${ORDENES_API}/ordenes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      data.timeline = buildTimeline(data.estado);
-      return data;
-    }
-  } catch (e) {
-    console.warn('Backend Spring Boot offline, simulando guardado local...');
+  const res = await fetch(`${ORDENES_API}/ordenes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    const data = await res.json();
+    return normalizeOrder(data);
   }
-
-  // Fallback Mock Order creation
-  const newId = `ORD-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-  const subtotal = carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
-  const impuestos = +(subtotal * 0.12).toFixed(2);
-  const envio = shippingInfo.tipoEntrega === 'domicilio' ? 15.00 : 0.00;
-  const total = +(subtotal + impuestos + envio).toFixed(2);
-
-  const nuevaOrden = {
-    id: newId,
-    fecha: new Date().toISOString(),
-    cliente: shippingInfo.nombreCompleto || 'Melvin García',
-    canal: 'Web Store',
-    estado: 'CREADA',
-    codigoRastreo: `LEX-${Math.floor(100000 + Math.random() * 900000)}-GT`,
-    metodoPago: paymentInfo.metodo === 'payklik' ? 'PayKlik (Tarjeta **** 4242)' : 'Transferencia Bancaria',
-    metodoEntrega: shippingInfo.tipoEntrega === 'domicilio' ? 'Envío a Domicilio' : 'Recogida en Tienda',
-    direccion: shippingInfo.direccion || 'Ciudad de Guatemala',
-    items: carrito.map(i => ({ id: i.id, nombre: i.nombre, precio: i.precio, cantidad: i.cantidad })),
-    subtotal,
-    impuestos,
-    envio,
-    total,
-    timeline: buildTimeline('CREADA')
-  };
-
-  MOCK_ORDERS.unshift(nuevaOrden);
-  return nuevaOrden;
+  const errData = await res.json().catch(() => ({}));
+  throw new Error(errData.error || 'Error al procesar la orden en el servidor');
 };
 
 export const getOrden = async (ordenId) => {
+  if (!ordenId) throw new Error('ID de orden no especificado');
+  const res = await fetch(`${ORDENES_API}/ordenes/${ordenId}`);
+  if (res.ok) {
+    const data = await res.json();
+    return normalizeOrder(data);
+  }
+  const err = await res.json().catch(() => ({}));
+  throw new Error(err.error || `Orden ${ordenId} no encontrada`);
+};
+
+export const getOrdenes = async () => {
   try {
-    const res = await fetch(`${ORDENES_API}/ordenes/${ordenId}`);
+    const res = await fetch(`${ORDENES_API}/ordenes`);
     if (res.ok) {
       const data = await res.json();
-      data.timeline = buildTimeline(data.estado);
-      return data;
+      return Array.isArray(data) ? data.map(normalizeOrder) : [];
     }
   } catch (e) {
-    console.warn('Backend Spring Boot offline, buscando en dataset local...');
+    console.warn('Error al obtener órdenes del backend:', e);
   }
+  return [];
+};
 
-  const found = MOCK_ORDERS.find(o => o.id.toLowerCase() === ordenId.toLowerCase());
-  if (found) return found;
-
-  return {
-    ...MOCK_ORDERS[0],
-    id: ordenId
-  };
+export const updateEstadoOrden = async (ordenId, nuevoEstado) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/${encodeURIComponent(ordenId)}/estado`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: nuevoEstado })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return normalizeOrder(data);
+    }
+  } catch (e) {
+    console.warn('Error al actualizar estado:', e);
+  }
+  return null;
 };
 
 export const getDashboardMetrics = async () => {
   try {
     const res = await fetch(`${ORDENES_API}/ordenes`);
     if (res.ok) {
-      const realOrders = await res.json();
-      if (realOrders && realOrders.length > 0) {
-        return {
-          totalOrdenesHoy: realOrders.length,
-          ordenesIncremento: '+15% vs ayer',
-          ordenesPendientes: realOrders.filter(o => o.estado !== 'ENTREGADA').length,
-          alertasActivas: 1,
-          ingresosHoy: '$' + realOrders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2),
-          sistemas: [
-            { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '42ms' },
-            { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '120ms' },
-            { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '55ms' },
-            { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
-          ],
-          ultimasOrdenes: realOrders
-        };
-      }
+      const rawOrders = await res.json();
+      const realOrders = Array.isArray(rawOrders) ? rawOrders.map(normalizeOrder) : [];
+      const totalVentas = realOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      return {
+        totalOrdenesHoy: realOrders.length,
+        ordenesIncremento: realOrders.length > 0 ? `+${realOrders.length} ordenes registradas` : '0 hoy',
+        ordenesPendientes: realOrders.filter(o => o.estado !== 'ENTREGADA').length,
+        alertasActivas: 0,
+        ingresosHoy: 'Q' + totalVentas.toFixed(2),
+        sistemas: [
+          { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '15ms' },
+          { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '45ms' },
+          { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '20ms' },
+          { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
+        ],
+        ultimasOrdenes: realOrders
+      };
     }
   } catch (e) {
-    console.warn('Backend Spring Boot offline, retornando métricas integradas...');
+    console.warn('Backend Ordenes offline:', e);
   }
 
   return {
-    totalOrdenesHoy: 1247,
-    ordenesIncremento: '+12% vs ayer',
-    ordenesPendientes: 38,
-    alertasActivas: 2,
-    ingresosHoy: '$42,890.50',
+    totalOrdenesHoy: 0,
+    ordenesIncremento: '0 hoy',
+    ordenesPendientes: 0,
+    alertasActivas: 0,
+    ingresosHoy: 'Q0.00',
     sistemas: [
-      { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '42ms' },
-      { nombre: 'SAT Facturación XML', estado: 'Alta Latencia', statusType: 'warning', latencia: '380ms' },
-      { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '55ms' },
+      { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '15ms' },
+      { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '45ms' },
+      { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '20ms' },
       { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
     ],
-    ultimasOrdenes: MOCK_ORDERS
+    ultimasOrdenes: []
   };
 };
 
 function buildTimeline(estadoActual) {
   const e = estadoActual || 'CREADA';
+  const isFinalizada = e === 'ENTREGADA';
+  const isError = e === 'INVENTARIO_INSUFICIENTE' || e === 'CANCELADA';
+
+  if (isError) {
+    return [
+      { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: false },
+      { estado: e, titulo: 'Cancelada', desc: 'Orden cancelada por falta de inventario o pago fallido.', fecha: 'Cancelado', completado: false, activo: true, statusType: 'error' }
+    ];
+  }
+
   return [
-    { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: e === 'CREADA' },
-    { estado: 'PAGADA', titulo: 'Pagada', desc: 'Pago procesado por pasarela PayKlik.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: e === 'PAGADA' },
-    { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Comprobante fiscal XML emitido.', fecha: 'Facturado', completado: ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: e === 'FACTURADA' },
-    { estado: 'EN_PREPARACION', titulo: 'En preparación', desc: 'Empaquetado en centro logístico.', fecha: 'Empaquetando', completado: ['EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: e === 'EN_PREPARACION' },
-    { estado: 'EN_TRANSITO', titulo: 'En tránsito', desc: 'Despachado con LogiExpress.', fecha: 'En camino', completado: ['EN_TRANSITO', 'ENTREGADA'].includes(e), activo: e === 'EN_TRANSITO' },
-    { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'Finalizado', completado: e === 'ENTREGADA', activo: e === 'ENTREGADA' }
+    { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: !isFinalizada && e === 'CREADA' },
+    { estado: 'PAGADA', titulo: 'Pagada', desc: 'Pago procesado por pasarela PayKlik.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: !isFinalizada && e === 'PAGADA' },
+    { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Comprobante fiscal XML emitido.', fecha: 'Facturado', completado: ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'FACTURADA' },
+    { estado: 'EN_PREPARACION', titulo: 'En preparación', desc: 'Empaquetado en centro logístico.', fecha: 'Empaquetando', completado: ['EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'EN_PREPARACION' },
+    { estado: 'EN_TRANSITO', titulo: 'En tránsito', desc: 'Despachado con LogiExpress.', fecha: 'En camino', completado: ['EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'EN_TRANSITO' },
+    { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'Finalizado', completado: e === 'ENTREGADA', activo: false }
   ];
 }
+
+export const registrarIncidenciaCliente = async (ordenId, tipo, detalle) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/${encodeURIComponent(ordenId)}/incidencias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, detalle })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Error al registrar incidencia en backend:', e);
+  }
+  return null;
+};
+
+export const getIncidencias = async () => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/incidencias`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Error al obtener incidencias del backend:', e);
+  }
+  return [];
+};
+
