@@ -11,11 +11,11 @@
  * @returns {boolean}
  */
 export function validarElegibilidadCredito(cliente, totalOrden, saldoDisponible) {
-  if (!cliente || typeof totalOrden !== 'number' || totalOrden <= 0) {
+  if (!cliente || typeof totalOrden !== 'number' || totalOrden <= 0 || typeof saldoDisponible !== 'number' || saldoDisponible < 0) {
     return false;
   }
   const score = cliente.creditScore ?? 80;
-  // Regla de negocio: Score mínimo de 70 y la orden no puede superar el saldo crediticio disponible
+  // Regla de negocio: Score minimo de 70 y la orden no puede superar el saldo crediticio disponible
   return score >= 70 && totalOrden <= saldoDisponible;
 }
 
@@ -67,9 +67,9 @@ export function formatearDetalleBNPL(total, plazoDias = 30, fechaVencimiento = '
  */
 export function filtrarMetodosPagoDisponibles(metodosBase, esAptoCredito) {
   if (!Array.isArray(metodosBase)) return [];
-  const lista = [...metodosBase];
-  if (esAptoCredito && !lista.includes('credito_propio')) {
-    lista.unshift('credito_propio'); // Colocar Crédito Propio como opción destacada inicial
+  const lista = metodosBase.filter(m => m !== 'credito_propio');
+  if (esAptoCredito) {
+    lista.unshift('credito_propio'); // Colocar Credito Propio como opcion destacada inicial
   }
   return lista;
 }
