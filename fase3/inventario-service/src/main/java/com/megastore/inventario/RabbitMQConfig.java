@@ -15,6 +15,9 @@ public class RabbitMQConfig {
     @Value("${app.rabbitmq.queue-ordenes-para-inventario:inventario.orden.queue}")
     private String queueName;
 
+    @Value("${app.rabbitmq.queue-cancelacion:inventario.cancelacion.queue}")
+    private String queueCancelacionName;
+
     @Bean
     public TopicExchange topicExchange() {
         return new TopicExchange(exchangeName, true, false);
@@ -28,6 +31,16 @@ public class RabbitMQConfig {
     @Bean
     public Binding bindingInventario(Queue inventarioOrdenQueue, TopicExchange topicExchange) {
         return BindingBuilder.bind(inventarioOrdenQueue).to(topicExchange).with("orden.creada");
+    }
+
+    @Bean
+    public Queue inventarioCancelacionQueue() {
+        return new Queue(queueCancelacionName != null ? queueCancelacionName : "inventario.cancelacion.queue", true);
+    }
+
+    @Bean
+    public Binding bindingInventarioCancelacion(Queue inventarioCancelacionQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(inventarioCancelacionQueue).to(topicExchange).with("orden.cancelada");
     }
 
     @Bean

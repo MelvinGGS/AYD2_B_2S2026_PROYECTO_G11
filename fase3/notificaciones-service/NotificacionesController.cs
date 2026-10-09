@@ -56,20 +56,19 @@ namespace NotificacionesService
             Response.Headers.Append("Cache-Control", "no-cache");
             Response.Headers.Append("Connection", "keep-alive");
 
-            int ultimoConteo = 0;
+            long lastProcessedId = 0;
             while (!cancellationToken.IsCancellationRequested)
             {
-                var logs = RabbitMQConsumerService.GetLogs();
-                if (logs.Count > ultimoConteo)
+                var nuevos = RabbitMQConsumerService.GetLogsSince(lastProcessedId);
+                foreach (var log in nuevos)
                 {
-                    var nuevos = logs.Take(logs.Count - ultimoConteo);
-                    foreach (var log in nuevos)
+                    var data = System.Text.Json.JsonSerializer.Serialize(log);
+                    await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+                    if (log.Id > lastProcessedId)
                     {
-                        var data = System.Text.Json.JsonSerializer.Serialize(log);
-                        await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
-                        await Response.Body.FlushAsync(cancellationToken);
+                        lastProcessedId = log.Id;
                     }
-                    ultimoConteo = logs.Count;
                 }
                 await Task.Delay(1000, cancellationToken);
             }

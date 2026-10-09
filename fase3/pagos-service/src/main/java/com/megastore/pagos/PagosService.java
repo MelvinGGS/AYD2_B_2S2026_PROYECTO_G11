@@ -37,12 +37,17 @@ public class PagosService {
         this.restTemplate = restTemplate;
     }
 
+    @CircuitBreaker(name = "payklikService", fallbackMethod = "encolarPagoFallback")
     public IntentoPago procesarPagoConCircuitBreaker(String ordenId, BigDecimal monto, String canal, String numeroTarjeta) {
-        return procesarPagoConCircuitBreaker(ordenId, monto, canal, numeroTarjeta, "Ciudad de Guatemala");
+        return procesarPagoInterno(ordenId, monto, canal, numeroTarjeta, "Ciudad de Guatemala");
     }
 
     @CircuitBreaker(name = "payklikService", fallbackMethod = "encolarPagoFallback")
     public IntentoPago procesarPagoConCircuitBreaker(String ordenId, BigDecimal monto, String canal, String numeroTarjeta, String direccionDestino) {
+        return procesarPagoInterno(ordenId, monto, canal, numeroTarjeta, direccionDestino);
+    }
+
+    private IntentoPago procesarPagoInterno(String ordenId, BigDecimal monto, String canal, String numeroTarjeta, String direccionDestino) {
         System.out.println("[PAYKLIK] Procesando transacción para Orden: " + ordenId);
 
         Map<String, Object> request = new HashMap<>();

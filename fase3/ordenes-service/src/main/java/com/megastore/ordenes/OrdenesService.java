@@ -102,14 +102,25 @@ public class OrdenesService {
             evento.put("plazoDias", "credito_propio".equalsIgnoreCase(guardada.getMetodoPago()) ? 30 : 0);
             evento.put("codigoRastreo", guardada.getCodigoRastreo());
             evento.put("fecha", guardada.getFechaCreacion().toString());
+            List<Map<String, Object>> itemsList = new ArrayList<>();
             if (guardada.getItems() != null && !guardada.getItems().isEmpty()) {
                 String pId = guardada.getItems().get(0).getProductoId();
                 evento.put("productoId", (pId != null && !pId.isBlank()) ? pId : "PROD-001");
                 evento.put("cantidad", guardada.getItems().get(0).getCantidad() != null ? guardada.getItems().get(0).getCantidad() : 1);
+                for (ItemOrden item : guardada.getItems()) {
+                    Map<String, Object> itMap = new HashMap<>();
+                    itMap.put("productoId", item.getProductoId());
+                    itMap.put("nombre", item.getNombre());
+                    itMap.put("cantidad", item.getCantidad());
+                    itMap.put("precioUnitario", item.getPrecioUnitario());
+                    itMap.put("subtotal", item.getSubtotal());
+                    itemsList.add(itMap);
+                }
             } else {
                 evento.put("productoId", "PROD-001");
                 evento.put("cantidad", 1);
             }
+            evento.put("items", itemsList);
 
             rabbitTemplate.convertAndSend(exchangeName, routingKeyOrdenCreada, evento);
         } catch (Exception e) {
@@ -121,6 +132,36 @@ public class OrdenesService {
 
     public Optional<Orden> obtenerOrdenPorId(String id) {
         return ordenRepository.findById(id);
+    }
+
+    public Optional<Orden> cancelarOrden(String id) {
+        Optional<Orden> opt = ordenRepository.findById(id);
+        if (opt.isPresent()) {
+            Orden orden = opt.get();
+            orden.setEstado("CANCELADA");
+            Orden guardada = ordenRepository.save(orden);
+
+            EventoAuditoria auditoria = new EventoAuditoria(
+                guardada.getId(),
+                "ORDENES",
+                "ORDEN_CANCELADA",
+                "Orden cancelada. Notificando restitucion de inventario."
+            );
+            auditoriaRepository.save(auditoria);
+
+            try {
+                Map<String, Object> evento = new HashMap<>();
+                evento.put("ordenId", guardada.getId());
+                evento.put("id", guardada.getId());
+                evento.put("estado", "CANCELADA");
+                evento.put("clienteId", guardada.getClienteId());
+                rabbitTemplate.convertAndSend(exchangeName, "orden.cancelada", evento);
+            } catch (Exception e) {
+                System.err.println("Advertencia RabbitMQ al cancelar orden: " + e.getMessage());
+            }
+            return Optional.of(guardada);
+        }
+        return Optional.empty();
     }
 
     public List<Orden> listarTodas() {
