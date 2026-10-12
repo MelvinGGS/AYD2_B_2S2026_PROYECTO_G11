@@ -102,6 +102,16 @@ jobs:
           echo "Ejecutando pruebas de resiliencia y pagos..."
           mvn -B test -f fase3/pagos-service/pom.xml
 
+      - name: Configurar .NET SDK 8.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Ejecutar Pruebas de Integración Logística (.NET 8 xUnit)
+        run: |
+          echo "Ejecutando 5 pruebas de integración de logística..."
+          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --logger "console;verbosity=normal"
+
   # ETAPA 3: DEPLOY (Despliegue automatizado)
   deploy:
     name: Deploy to Production Environment
