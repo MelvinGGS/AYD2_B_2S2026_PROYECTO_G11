@@ -52,16 +52,24 @@ namespace LogisticaService
             return "CD_NORTE";
         }
 
+        // se hace el rastreo: PENDIENTE -> PREPARADO -> EN_TRANSITO -> ENTREGADO.
         private static readonly Dictionary<string, List<string>> TransicionesValidas = new()
         {
             { "PENDIENTE", new List<string> { "PREPARADO", "CANCELADO" } },
             { "PREPARADO", new List<string> { "EN_TRANSITO" } },
             { "EN_TRANSITO", new List<string> { "ENTREGADO", "INCIDENCIA" } },
-            { "ENTREGADO", new List<string>() }
+            { "ENTREGADO", new List<string>() },
+            { "CANCELADO", new List<string>() },
+            { "INCIDENCIA", new List<string>() }
         };
 
-        public static bool ValidarTransicionEstado(string estadoActual, string nuevoEstado)
+        public static bool ValidarTransicionEstado(string? estadoActual, string? nuevoEstado)
         {
+            if (string.IsNullOrWhiteSpace(estadoActual) || string.IsNullOrWhiteSpace(nuevoEstado))
+            {
+                return false;
+            }
+
             if (TransicionesValidas.TryGetValue(estadoActual.ToUpper(), out var permitidos))
             {
                 return permitidos.Contains(nuevoEstado.ToUpper());
