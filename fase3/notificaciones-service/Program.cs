@@ -54,10 +54,12 @@ app.Map("/ws/notificaciones", async (HttpContext context) =>
 });
 
 // Endpoint 2: WebSocket dedicado al tracking reactivo de una orden específica
-app.Map("/ws/tracking/{ordenId}", async (string ordenId, HttpContext context) =>
+app.Map("/ws/tracking", async (HttpContext context) =>
 {
     if (context.WebSockets.IsWebSocketRequest)
     {
+        var path = context.Request.Path.Value?.Trim('/');
+        var ordenId = !string.IsNullOrEmpty(path) ? path : context.Request.Query["ordenId"].FirstOrDefault();
         var hub = context.RequestServices.GetRequiredService<WebSocketNotificationHub>();
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
         await hub.HandleWebSocketAsync(webSocket, ordenId, context.RequestAborted);
