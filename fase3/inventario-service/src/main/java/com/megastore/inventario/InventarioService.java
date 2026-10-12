@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,17 +54,21 @@ public class InventarioService {
             // Extraer items solicitados, soporta arreglo de items o campos individuales productoId y cantidad
             List<SolicitudItem> itemsSolicitados = new ArrayList<>();
             Object rawItems = ordenData.get("items");
-            if (rawItems instanceof List<?> list && !list.isEmpty()) {
-                for (Object itemObj : list) {
-                    if (itemObj instanceof Map<?, ?> itemMap) {
-                        Object pidObj = itemMap.get("productoId");
-                        String pId = (pidObj != null && !pidObj.toString().isBlank()) ? pidObj.toString() : "PROD-001";
-                        int qty = 1;
-                        Object qtyObj = itemMap.get("cantidad");
-                        if (qtyObj != null) {
-                            try { qty = Integer.parseInt(qtyObj.toString()); } catch (NumberFormatException ignored) {}
+            if (rawItems instanceof List) {
+                List<?> list = (List<?>) rawItems;
+                if (!list.isEmpty()) {
+                    for (Object itemObj : list) {
+                        if (itemObj instanceof Map) {
+                            Map<?, ?> itemMap = (Map<?, ?>) itemObj;
+                            Object pidObj = itemMap.get("productoId");
+                            String pId = (pidObj != null && !pidObj.toString().isBlank()) ? pidObj.toString() : "PROD-001";
+                            int qty = 1;
+                            Object qtyObj = itemMap.get("cantidad");
+                            if (qtyObj != null) {
+                                try { qty = Integer.parseInt(qtyObj.toString()); } catch (NumberFormatException ignored) {}
+                            }
+                            itemsSolicitados.add(new SolicitudItem(pId, Math.max(1, qty)));
                         }
-                        itemsSolicitados.add(new SolicitudItem(pId, Math.max(1, qty)));
                     }
                 }
             }

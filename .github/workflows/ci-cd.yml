@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: fase3/frontend/package.json
+          cache-dependency-path: fase3/frontend/package-lock.json
 
       - name: Compilar Frontend React SPA
         run: |
@@ -44,6 +44,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
           cache: 'maven'
+          cache-dependency-path: 'fase3/**/pom.xml'
 
       - name: Compilar Microservicios Java
         run: |
