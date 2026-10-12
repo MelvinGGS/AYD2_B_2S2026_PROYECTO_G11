@@ -42,6 +42,8 @@ public class ItemOrden {
     public void setProductoId(String productoId) { this.productoId = productoId; }
     public String getNombreProducto() { return nombreProducto; }
     public void setNombreProducto(String nombreProducto) { this.nombreProducto = nombreProducto; }
+    public String getNombre() { return nombreProducto; }
+    public void setNombre(String nombre) { this.nombreProducto = nombre; }
     public BigDecimal getPrecioUnitario() { return precioUnitario; }
     public void setPrecioUnitario(BigDecimal precioUnitario) { this.precioUnitario = precioUnitario; }
     public Integer getCantidad() { return cantidad; }

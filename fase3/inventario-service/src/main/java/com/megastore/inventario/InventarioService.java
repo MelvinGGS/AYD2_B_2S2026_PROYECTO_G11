@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,37 +35,85 @@ public class InventarioService {
         this.rabbitTemplate = rabbitTemplate;
     }
 
+    private static class SolicitudItem {
+        final String productoId;
+        final int cantidad;
+        SolicitudItem(String productoId, int cantidad) {
+            this.productoId = productoId;
+            this.cantidad = cantidad;
+        }
+    }
+
     @RabbitListener(queues = "${app.rabbitmq.queue-ordenes-para-inventario:inventario.orden.queue}")
     @Transactional
     public void procesarOrdenCreada(Map<String, Object> ordenData) {
         try {
             String ordenId = ordenData.get("ordenId") != null ? ordenData.get("ordenId").toString() : 
                 (ordenData.get("id") != null ? ordenData.get("id").toString() : "ORD-UNKNOWN");
-            Object rawPid = ordenData.get("productoId");
-            String productoId = (rawPid != null && !rawPid.toString().isBlank()) ? rawPid.toString() : "PROD-001";
-            Object rawQty = ordenData.get("cantidad");
-            Integer cantidadSolicitada = 1;
-            if (rawQty != null) {
-                try {
-                    cantidadSolicitada = Integer.parseInt(rawQty.toString());
-                } catch (NumberFormatException ignored) {}
+
+            // Extraer items solicitados, soporta arreglo de items o campos individuales productoId y cantidad
+            List<SolicitudItem> itemsSolicitados = new ArrayList<>();
+            Object rawItems = ordenData.get("items");
+            if (rawItems instanceof List) {
+                List<?> list = (List<?>) rawItems;
+                if (!list.isEmpty()) {
+                    for (Object itemObj : list) {
+                        if (itemObj instanceof Map) {
+                            Map<?, ?> itemMap = (Map<?, ?>) itemObj;
+                            Object pidObj = itemMap.get("productoId");
+                            String pId = (pidObj != null && !pidObj.toString().isBlank()) ? pidObj.toString() : "PROD-001";
+                            int qty = 1;
+                            Object qtyObj = itemMap.get("cantidad");
+                            if (qtyObj != null) {
+                                try { qty = Integer.parseInt(qtyObj.toString()); } catch (NumberFormatException ignored) {}
+                            }
+                            itemsSolicitados.add(new SolicitudItem(pId, Math.max(1, qty)));
+                        }
+                    }
+                }
+            }
+
+            if (itemsSolicitados.isEmpty()) {
+                Object rawPid = ordenData.get("productoId");
+                String productoId = (rawPid != null && !rawPid.toString().isBlank()) ? rawPid.toString() : "PROD-001";
+                Object rawQty = ordenData.get("cantidad");
+                int cantidadSolicitada = 1;
+                if (rawQty != null) {
+                    try {
+                        cantidadSolicitada = Integer.parseInt(rawQty.toString());
+                    } catch (NumberFormatException ignored) {}
+                }
+                itemsSolicitados.add(new SolicitudItem(productoId, Math.max(1, cantidadSolicitada)));
             }
             
-            System.out.println("[INVENTARIO LISTENER] Procesando Orden: " + ordenId + " | Producto: " + productoId + " | Cantidad: " + cantidadSolicitada);
+            System.out.println("[INVENTARIO LISTENER] Procesando Orden: " + ordenId + " | Items a reservar: " + itemsSolicitados.size() 
+                    + " | Metodo Pago: " + ordenData.get("metodoPago"));
 
-            // 1. Buscar stock físico del producto en todas las ubicaciones
-            List<Stock> stocks = stockRepository.findByProductoId(productoId);
-            if (stocks == null || stocks.isEmpty()) stocks = stockRepository.findByProductoId(productoId.toLowerCase());
-            if (stocks == null || stocks.isEmpty()) stocks = stockRepository.findByProductoId(productoId.toUpperCase());
+            // Verificar disponibilidad de stock para todos los items
+            Map<SolicitudItem, Stock> asignaciones = new HashMap<>();
+            boolean stockSuficienteParaTodos = true;
 
-            // 2. Buscar una ubicación que tenga suficiente stock para la cantidad solicitada
-            Stock stockAfectado = null;
-            if (stocks != null) {
-                for (Stock s : stocks) {
-                    if (s.getCantidad() >= cantidadSolicitada) {
-                        stockAfectado = s;
-                        break;
+            for (SolicitudItem item : itemsSolicitados) {
+                List<Stock> stocks = stockRepository.findByProductoId(item.productoId);
+                if (stocks == null || stocks.isEmpty()) stocks = stockRepository.findByProductoId(item.productoId.toLowerCase());
+                if (stocks == null || stocks.isEmpty()) stocks = stockRepository.findByProductoId(item.productoId.toUpperCase());
+
+                Stock stockDisponible = null;
+                if (stocks != null) {
+                    for (Stock s : stocks) {
+                        if (s.getCantidad() >= item.cantidad) {
+                            stockDisponible = s;
+                            break;
+                        }
                     }
+                }
+
+                if (stockDisponible != null) {
+                    asignaciones.put(item, stockDisponible);
+                } else {
+                    stockSuficienteParaTodos = false;
+                    System.out.println("[INVENTARIO] Falta stock para producto: " + item.productoId + ", requerido: " + item.cantidad);
+                    break;
                 }
             }
 
@@ -72,17 +121,22 @@ public class InventarioService {
             eventoRespuesta.put("ordenId", ordenId);
             eventoRespuesta.put("fecha", LocalDateTime.now().toString());
 
-            // 3. Regla de Negocio Crítica: ¿Alcanza el inventario?
-            if (stockAfectado != null) {
-                // FIX SOBREVENTAS: Restar físicamente la cantidad del registro Stock.
-                // Esto activa el Lock Optimista (@Version en Stock) y lanza
-                // OptimisticLockException si dos hilos intentan reservar simultáneamente.
-                stockAfectado.setCantidad(stockAfectado.getCantidad() - cantidadSolicitada);
-                stockRepository.save(stockAfectado);
+            // Regla de Negocio Crítica: Reserva temporal y bloqueo optimista
+            if (stockSuficienteParaTodos) {
+                // Descontar físicamente y registrar reservas temporales (15 min TTL)
+                for (Map.Entry<SolicitudItem, Stock> entry : asignaciones.entrySet()) {
+                    SolicitudItem item = entry.getKey();
+                    Stock stockAfectado = entry.getValue();
 
-                // Registrar reserva temporal con bloqueo de 15 minutos
-                Reserva reserva = new Reserva(ordenId, productoId, stockAfectado.getUbicacion().getId(), cantidadSolicitada);
-                reservaRepository.save(reserva);
+                    // FIX SOBREVENTAS: Restar cantidad física del registro Stock.
+                    // Activa el Lock Optimista (@Version en Stock)
+                    stockAfectado.setCantidad(stockAfectado.getCantidad() - item.cantidad);
+                    stockRepository.save(stockAfectado);
+
+                    // Registrar reserva temporal con bloqueo de 15 minutos
+                    Reserva reserva = new Reserva(ordenId, item.productoId, stockAfectado.getUbicacion().getId(), item.cantidad);
+                    reservaRepository.save(reserva);
+                }
 
                 eventoRespuesta.put("estado", "INVENTARIO_RESERVADO");
                 if (ordenData.get("total") != null) eventoRespuesta.put("total", ordenData.get("total"));
@@ -91,16 +145,20 @@ public class InventarioService {
                 if (ordenData.get("direccion") != null) eventoRespuesta.put("direccion", ordenData.get("direccion"));
                 if (ordenData.get("direccionDestino") != null) eventoRespuesta.put("direccionDestino", ordenData.get("direccionDestino"));
                 if (ordenData.get("numeroTarjeta") != null) eventoRespuesta.put("numeroTarjeta", ordenData.get("numeroTarjeta"));
+                if (ordenData.get("metodoPago") != null) eventoRespuesta.put("metodoPago", ordenData.get("metodoPago"));
+                if (ordenData.get("plazoDias") != null) eventoRespuesta.put("plazoDias", ordenData.get("plazoDias"));
+                if (ordenData.get("cliente") != null) eventoRespuesta.put("cliente", ordenData.get("cliente"));
+                if (ordenData.get("items") != null) eventoRespuesta.put("items", ordenData.get("items"));
 
                 rabbitTemplate.convertAndSend(exchangeName, routingKeyReservado, eventoRespuesta);
-                System.out.println("[INVENTARIO] EXITO: Stock reservado (15 min). Evento 'inventario.reservado' publicado.");
+                System.out.println("[INVENTARIO] EXITO: Stock reservado (TTL 15 min). Evento 'inventario.reservado' publicado para orden: " + ordenId);
             } else {
-                // No hay suficiente inventario disponible en ninguna ubicación
+                // Stock insuficiente para uno o más productos
                 eventoRespuesta.put("estado", "INVENTARIO_INSUFICIENTE");
-                eventoRespuesta.put("motivo", "Stock insuficiente. Solicitado: " + cantidadSolicitada);
+                eventoRespuesta.put("motivo", "Stock insuficiente para satisfacer los productos solicitados.");
                 
                 rabbitTemplate.convertAndSend(exchangeName, routingKeyInsuficiente, eventoRespuesta);
-                System.out.println("[INVENTARIO] FALLO: Stock insuficiente. Evento 'inventario.insuficiente' publicado.");
+                System.out.println("[INVENTARIO] FALLO: Stock insuficiente para orden " + ordenId + ". Evento 'inventario.insuficiente' publicado.");
             }
             
         } catch (org.springframework.orm.ObjectOptimisticLockingFailureException lockEx) {
@@ -110,6 +168,19 @@ public class InventarioService {
             throw lockEx;
         } catch (Exception e) {
             System.err.println("Error procesando reserva de inventario: " + e.getMessage());
+        }
+    }
+
+    @RabbitListener(queues = "${app.rabbitmq.queue-pago-confirmado:inventario.pago.confirmado.queue}")
+    @Transactional
+    public void procesarPagoConfirmado(Map<String, Object> evento) {
+        if (evento == null || !evento.containsKey("ordenId")) return;
+        String ordenId = (String) evento.get("ordenId");
+        System.out.println("[INVENTARIO] Pago confirmado para orden: " + ordenId + ". Consolidando reserva definitiva (desactivando TTL).");
+        List<Reserva> reservas = reservaRepository.findByOrdenIdAndActivaTrue(ordenId);
+        for (Reserva r : reservas) {
+            r.setActiva(false); // Venta consolidada: ya no expira tras 15 minutos
+            reservaRepository.save(r);
         }
     }
 
@@ -123,7 +194,7 @@ public class InventarioService {
             r.setActiva(false);
             reservaRepository.save(r);
             
-            // Devolver inventario al stock físico al expirar la reserva
+            // Devolver inventario al stock físico al expirar la reserva (TTL 15 min excedido sin pago)
             List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
             if (stocks != null) {
                 for (Stock s : stocks) {
@@ -135,6 +206,29 @@ public class InventarioService {
                 }
             }
             System.out.println("[EXPIRACION RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada y devuelta a stock para orden " + r.getOrdenId());
+        }
+    }
+
+    @RabbitListener(queues = "${app.rabbitmq.queue-cancelacion:inventario.cancelacion.queue}")
+    @Transactional
+    public void procesarOrdenCancelada(Map<String, Object> evento) {
+        if (evento == null || !evento.containsKey("ordenId")) return;
+        String ordenId = (String) evento.get("ordenId");
+        System.out.println("[INVENTARIO] Procesando liberacion de stock por orden cancelada: " + ordenId);
+        List<Reserva> reservas = reservaRepository.findByOrdenIdAndActivaTrue(ordenId);
+        for (Reserva r : reservas) {
+            r.setActiva(false);
+            reservaRepository.save(r);
+            List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
+            if (stocks != null) {
+                for (Stock s : stocks) {
+                    if (s.getUbicacion().getId().equals(r.getUbicacionId())) {
+                        s.setCantidad(s.getCantidad() + r.getCantidad());
+                        stockRepository.save(s);
+                        break;
+                    }
+                }
+            }
         }
     }
 }

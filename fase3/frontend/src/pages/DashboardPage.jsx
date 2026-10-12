@@ -124,28 +124,10 @@ export const DashboardPage = () => {
       case 'Enviado': return <span className="badge badge-info">En tránsito</span>;
       case 'ENTREGADA': return <span className="badge badge-success">Entregada</span>;
       case 'FACTURADA': return <span className="badge badge-info">Facturada</span>;
+      case 'CANCELADA': return <span className="badge badge-error">Cancelada</span>;
       default: return <span className="badge badge-warning">Procesando</span>;
     }
   };
-
-  // Mock data for Inventario Unificado
-  const mockInventario = [
-    { sku: 'SKU-EPR-001', producto: 'Cafetera Espresso Serie X', cdNorte: 15, cdSur: 8, tiendas: 42, total: 65, estado: 'Óptimo' },
-    { sku: 'SKU-REF-002', producto: 'Refrigerador Multi-Door 24 cu.ft', cdNorte: 2, cdSur: 1, tiendas: 5, total: 8, estado: 'Crítico' },
-    { sku: 'SKU-ROB-003', producto: 'Robot Aspirador Laser LiDAR', cdNorte: 25, cdSur: 18, tiendas: 60, total: 103, estado: 'Óptimo' },
-    { sku: 'SKU-SMA-004', producto: 'Smartwatch V3 Pro AMOLED', cdNorte: 40, cdSur: 32, tiendas: 110, total: 182, estado: 'Óptimo' },
-    { sku: 'SKU-AUR-005', producto: 'Auriculares Noise Cancelling Pro', cdNorte: 10, cdSur: 5, tiendas: 18, total: 33, estado: 'Bajo' },
-    { sku: 'SKU-OLED-006', producto: 'Smart TV OLED 4K 65"', cdNorte: 4, cdSur: 3, tiendas: 9, total: 16, estado: 'Bajo' }
-  ];
-
-  // Mock data for Clientes Omnicanal
-  const mockClientes = [
-    { id: 'CLI-101', nombre: 'Melvin García', email: 'melvin@example.com', canal: 'Web Store', ordenes: 8, totalGasto: 1840.50, estado: 'Activo' },
-    { id: 'CLI-102', nombre: 'Carlos Mendoza', email: 'carlos.m@example.com', canal: 'App Móvil', ordenes: 5, totalGasto: 920.00, estado: 'Activo' },
-    { id: 'CLI-103', nombre: 'Ana Lucía Gómez', email: 'ana.gomez@example.com', canal: 'Call Center', ordenes: 12, totalGasto: 3450.80, estado: 'VIP' },
-    { id: 'CLI-104', nombre: 'Sofia Ramírez', email: 'sofia.r@example.com', canal: 'Tienda Física', ordenes: 3, totalGasto: 410.00, estado: 'Activo' },
-    { id: 'CLI-105', nombre: 'Fernando Cabrera', email: 'fcabrera@example.com', canal: 'Web Store', ordenes: 1, totalGasto: 129.50, estado: 'Nuevo' }
-  ];
 
   const filteredOrders = metrics?.ultimasOrdenes?.filter(o => {
     const oId = (o.id || '').toLowerCase();
@@ -153,8 +135,11 @@ export const DashboardPage = () => {
     const s = orderSearch.toLowerCase();
     const matchesSearch = oId.includes(s) || oClient.includes(s);
     const matchesFilter = orderStatusFilter === 'TODOS' || o.estado === orderStatusFilter;
+    const isCredito = o.metodoPago === 'credito_propio' ||
+      o.metodoPago === 'CREDITO_PROPIO_30D' ||
+      (typeof o.metodoPago === 'string' && o.metodoPago.toLowerCase().includes('credito'));
     const matchesPayment = orderPaymentFilter === 'TODOS' ||
-      (orderPaymentFilter === 'credito_propio' ? o.metodoPago === 'credito_propio' : o.metodoPago !== 'credito_propio');
+      (orderPaymentFilter === 'credito_propio' ? isCredito : !isCredito);
     return matchesSearch && matchesFilter && matchesPayment;
   }) || [];
 
@@ -547,7 +532,7 @@ export const DashboardPage = () => {
                           <td className="font-bold">{ord.clienteNombre || ord.cliente || 'Cliente Omnicanal'}</td>
                           <td><span className="channel-tag">{ord.canal || 'Web Store'}</span></td>
                           <td className="font-label-sm">
-                            {ord.metodoPago === 'credito_propio' ? (
+                            {(ord.metodoPago === 'credito_propio' || ord.metodoPago === 'CREDITO_PROPIO_30D' || (typeof ord.metodoPago === 'string' && ord.metodoPago.toLowerCase().includes('credito'))) ? (
                               <span className="badge badge-warning" style={{ background: 'rgba(255, 107, 0, 0.15)', color: 'var(--orange-primary)', border: '1px solid rgba(255, 107, 0, 0.35)', fontWeight: 600 }}>
                                 Crédito Propio (30d)
                               </span>
@@ -571,6 +556,7 @@ export const DashboardPage = () => {
                                 <option value="EN_PREPARACION">Cambiar: En preparación</option>
                                 <option value="EN_TRANSITO">Cambiar: En tránsito</option>
                                 <option value="ENTREGADA">Cambiar: Entregada</option>
+                                <option value="CANCELADA">Cambiar: Cancelada</option>
                               </select>
                             </div>
                           </td>

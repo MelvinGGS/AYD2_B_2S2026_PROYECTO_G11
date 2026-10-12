@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -14,6 +15,9 @@ public class CreditoController {
 
     private final OrdenRepository ordenRepository;
     private final EventoAuditoriaRepository auditoriaRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
 
     public CreditoController(OrdenRepository ordenRepository,
                              EventoAuditoriaRepository auditoriaRepository) {
@@ -26,17 +30,26 @@ public class CreditoController {
         String clienteId = request.get("clienteId") != null ? request.get("clienteId").toString() : "1";
         
         BigDecimal montoOrden = BigDecimal.ZERO;
-        if (request.get("montoOrden") instanceof Number) {
-            montoOrden = new BigDecimal(request.get("montoOrden").toString());
-        } else if (request.get("montoOrden") instanceof String) {
+        Object mObj = request.get("montoOrden") != null ? request.get("montoOrden") : request.get("monto");
+        if (mObj instanceof Number) {
+            montoOrden = new BigDecimal(mObj.toString());
+        } else if (mObj instanceof String) {
             try {
-                montoOrden = new BigDecimal((String) request.get("montoOrden"));
+                montoOrden = new BigDecimal((String) mObj);
             } catch (Exception ignored) {}
         }
 
-        // Historial real del cliente en el ERP/base de datos
-        long ordenesPrevias = ordenRepository.count();
-        long incidencias = auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("INCIDENCIA").size();
+        // Historial real del cliente en el ERP/base de datos (aislado por clienteId)
+        List<Orden> ordenesCliente = ordenRepository.findByClienteId(clienteId);
+        long ordenesPrevias = ordenesCliente.size();
+
+        java.util.Set<String> idsCliente = ordenesCliente.stream()
+                .map(Orden::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        long incidencias = auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("INCIDENCIA").stream()
+                .filter(a -> idsCliente.contains(a.getOrdenId()) || clienteId.equals(a.getOrdenId()))
+                .count();
 
         // Motor de reglas de scoring crediticio
         int score = 85;
@@ -48,7 +61,28 @@ public class CreditoController {
         }
 
         BigDecimal limiteCredito = new BigDecimal("5000.00");
-        BigDecimal saldoDisponible = new BigDecimal("3500.00");
+        BigDecimal deudaActual = ordenesCliente.stream()
+                .filter(o -> ("credito_propio".equalsIgnoreCase(o.getMetodoPago()) || "CREDITO_PROPIO_30D".equalsIgnoreCase(o.getMetodoPago())) && !"CANCELADA".equalsIgnoreCase(o.getEstado()))
+                .map(o -> o.getTotal() != null ? o.getTotal() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Deducción de abonos registrados para este cliente
+        BigDecimal abonosRegistrados = auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("ABONO_CREDITO").stream()
+                .filter(a -> clienteId.equals(a.getOrdenId()) || idsCliente.contains(a.getOrdenId()))
+                .map(a -> {
+                    try {
+                        String det = a.getDetalle();
+                        if (det != null && det.contains("monto:")) {
+                            String mStr = det.substring(det.indexOf("monto:") + 6).trim().split(" ")[0];
+                            return new BigDecimal(mStr);
+                        }
+                    } catch (Exception ignored) {}
+                    return BigDecimal.ZERO;
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal saldoDeudor = deudaActual.subtract(abonosRegistrados).max(BigDecimal.ZERO);
+        BigDecimal saldoDisponible = limiteCredito.subtract(saldoDeudor).max(BigDecimal.ZERO);
 
         boolean aprobado = score >= 70 && montoOrden.compareTo(saldoDisponible) <= 0;
 
@@ -58,12 +92,54 @@ public class CreditoController {
         respuesta.put("aprobado", aprobado);
         respuesta.put("limiteCredito", limiteCredito);
         respuesta.put("saldoDisponible", saldoDisponible);
+        respuesta.put("saldoDeudor", saldoDeudor);
         respuesta.put("plazoDias", aprobado ? 30 : 0);
         respuesta.put("tasaInteres", 0.0);
         respuesta.put("mensaje", aprobado 
                 ? "Crédito propio aprobado por 30 días sin intereses" 
                 : "No califica para la campaña Compra ahora, paga en 30 días");
 
+        try {
+            if (rabbitTemplate != null) {
+                rabbitTemplate.convertAndSend("sgologic.exchange", aprobado ? "credito.aprobado" : "credito.rechazado", respuesta);
+            }
+        } catch (Exception e) {
+            System.err.println("Aviso RabbitMQ Credito: No se pudo emitir evento reactivo: " + e.getMessage());
+        }
+
         return ResponseEntity.ok(respuesta);
+    }
+
+    @PostMapping("/abono")
+    public ResponseEntity<Map<String, Object>> registrarAbono(@RequestBody Map<String, Object> request) {
+        String clienteId = request.get("clienteId") != null ? request.get("clienteId").toString() : "1";
+        BigDecimal montoAbono = BigDecimal.ZERO;
+        if (request.get("monto") instanceof Number) {
+            montoAbono = new BigDecimal(request.get("monto").toString());
+        } else if (request.get("monto") instanceof String) {
+            try {
+                montoAbono = new BigDecimal((String) request.get("monto"));
+            } catch (Exception ignored) {}
+        }
+
+        if (montoAbono.compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El monto de abono debe ser mayor a 0"));
+        }
+
+        EventoAuditoria abonoAuditoria = new EventoAuditoria(
+                clienteId,
+                "FINANZAS",
+                "ABONO_CREDITO",
+                "Abono a credito propio registrado monto:" + montoAbono.toPlainString()
+        );
+        auditoriaRepository.save(abonoAuditoria);
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("clienteId", clienteId);
+        resp.put("montoAbonado", montoAbono);
+        resp.put("mensaje", "Abono a credito propio aplicado exitosamente");
+        resp.put("fecha", java.time.LocalDateTime.now().toString());
+
+        return ResponseEntity.ok(resp);
     }
 }

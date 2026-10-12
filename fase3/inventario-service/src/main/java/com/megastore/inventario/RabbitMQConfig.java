@@ -15,6 +15,12 @@ public class RabbitMQConfig {
     @Value("${app.rabbitmq.queue-ordenes-para-inventario:inventario.orden.queue}")
     private String queueName;
 
+    @Value("${app.rabbitmq.queue-cancelacion:inventario.cancelacion.queue}")
+    private String queueCancelacionName;
+
+    @Value("${app.rabbitmq.queue-pago-confirmado:inventario.pago.confirmado.queue}")
+    private String queuePagoConfirmadoName;
+
     @Bean
     public TopicExchange topicExchange() {
         return new TopicExchange(exchangeName, true, false);
@@ -28,6 +34,26 @@ public class RabbitMQConfig {
     @Bean
     public Binding bindingInventario(Queue inventarioOrdenQueue, TopicExchange topicExchange) {
         return BindingBuilder.bind(inventarioOrdenQueue).to(topicExchange).with("orden.creada");
+    }
+
+    @Bean
+    public Queue inventarioCancelacionQueue() {
+        return new Queue(queueCancelacionName != null ? queueCancelacionName : "inventario.cancelacion.queue", true);
+    }
+
+    @Bean
+    public Binding bindingInventarioCancelacion(Queue inventarioCancelacionQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(inventarioCancelacionQueue).to(topicExchange).with("orden.cancelada");
+    }
+
+    @Bean
+    public Queue inventarioPagoConfirmadoQueue() {
+        return new Queue(queuePagoConfirmadoName != null ? queuePagoConfirmadoName : "inventario.pago.confirmado.queue", true);
+    }
+
+    @Bean
+    public Binding bindingInventarioPagoConfirmado(Queue inventarioPagoConfirmadoQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(inventarioPagoConfirmadoQueue).to(topicExchange).with("pago.confirmado");
     }
 
     @Bean

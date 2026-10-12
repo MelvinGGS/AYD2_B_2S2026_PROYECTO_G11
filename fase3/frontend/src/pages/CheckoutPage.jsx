@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCircle2, Shield, AlertTriangle, X, CalendarClock, Sparkles } from 'lucide-react';
+import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCircle2, Shield, AlertTriangle, X, CalendarClock, Sparkles, Trash2 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { crearOrden, evaluarCredito } from '../services/api';
+import {
+  validarElegibilidadCredito,
+  calcularVencimientoCredito,
+  formatearDetalleBNPL,
+  filtrarMetodosPagoDisponibles,
+  validarFormularioCheckout
+} from '../utils/checkoutUtils';
 
 export const CheckoutPage = () => {
   const { cartItems, subtotal, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -76,10 +83,49 @@ export const CheckoutPage = () => {
     return () => { isMounted = false; };
   }, [user, total]);
 
+  // Cálculo de vencimiento y detalle comercial BNPL (checkoutUtils)
+  const fechaVencimientoCalculada = React.useMemo(() => {
+    try {
+      return calcularVencimientoCredito(new Date(), 30);
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const detalleBNPL = React.useMemo(() => {
+    if (!creditoInfo?.aprobado || total <= 0) return null;
+    try {
+      return formatearDetalleBNPL(total, 30, creditoInfo.fechaVencimiento || fechaVencimientoCalculada);
+    } catch {
+      return null;
+    }
+  }, [creditoInfo, total, fechaVencimientoCalculada]);
+
+  const handleEliminarTarjeta = (tarjetaId) => {
+    if (!user?.tarjetas) return;
+    const filtradas = user.tarjetas.filter(t => t.id !== tarjetaId);
+    if (updateProfile) {
+      updateProfile({ tarjetas: filtradas });
+    }
+    setSelectedCardId(filtradas.length ? filtradas[0].id : 'manual');
+  };
+
   const handleConfirmPurchase = async (e) => {
     e.preventDefault();
     if (cartItems.length === 0) {
       navigate('/catalogo');
+      return;
+    }
+
+    // Validación centralizada con checkoutUtils
+    const validacion = validarFormularioCheckout(
+      { nombreCompleto: fullName, telefono: phone, direccion: address, tipoEntrega: deliveryType },
+      paymentMethod,
+      { manual: selectedCardId === 'manual', numero: cardNumber, vencimiento: expiry, cvv }
+    );
+
+    if (!validacion.valido) {
+      setCheckoutError(validacion.error || 'Por favor completa los campos requeridos.');
       return;
     }
 
@@ -326,7 +372,28 @@ export const CheckoutPage = () => {
                     <div className="card-form-sub">
                       {user?.tarjetas && user.tarjetas.length > 0 && (
                         <div className="form-group">
-                          <label className="form-label">Seleccionar Tarjeta Registrada</label>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                            <label className="form-label" style={{ margin: 0 }}>Seleccionar Tarjeta Registrada</label>
+                            {selectedCardId !== 'manual' && (
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarTarjeta(selectedCardId)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#ef4444',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.78rem'
+                                }}
+                                title="Eliminar tarjeta guardada"
+                              >
+                                <Trash2 size={13} /> Eliminar tarjeta
+                              </button>
+                            )}
+                          </div>
                           <select
                             className="form-input"
                             value={selectedCardId}
