@@ -28,8 +28,8 @@ export const SeguimientoPage = () => {
           } else if (user.nombre) {
             displayList = (allOrders || []).filter(
               o => (o.clienteNombre && o.clienteNombre.toLowerCase() === user.nombre.toLowerCase()) ||
-                   (o.cliente && o.cliente.toLowerCase() === user.nombre.toLowerCase()) ||
-                   (o.clienteId && String(o.clienteId) === String(user.id))
+                (o.cliente && o.cliente.toLowerCase() === user.nombre.toLowerCase()) ||
+                (o.clienteId && String(o.clienteId) === String(user.id))
             );
           }
         }
@@ -63,21 +63,78 @@ export const SeguimientoPage = () => {
   const [incidentType, setIncidentType] = useState('demora');
   const [incidentNote, setIncidentNote] = useState('');
   const [incidentSent, setIncidentSent] = useState(false);
+  const [isLiveReactive, setIsLiveReactive] = useState(false);
+  const [liveNotification, setLiveNotification] = useState(null);
 
-  // Live polling: refreshes order status automatically without page reload
+  // Conexión reactiva en tiempo real (WebSockets / SSE) con notificaciones-service (:8086)
   useEffect(() => {
     if (!orden?.id || orden.estado === 'ENTREGADA') return;
-    const interval = setInterval(async () => {
-      try {
-        const fresh = await getOrden(orden.id);
-        if (fresh && fresh.estado !== orden.estado) {
-          setOrden(fresh);
+
+    let ws = null;
+    let eventSource = null;
+    let isConnected = false;
+
+    try {
+      // Intento primario: WebSockets nativos reactivos
+      ws = new WebSocket(`ws://localhost:8086/ws/tracking/${encodeURIComponent(orden.id)}`);
+
+      ws.onopen = () => {
+        setIsLiveReactive(true);
+        isConnected = true;
+        console.log('[PUSH REACTIVO] WebSocket conectado para orden:', orden.id);
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[PUSH REACTIVO] Evento recibido vía WebSocket:', data);
+          setLiveNotification(data);
+          // Refrescar orden instantáneamente sin esperar polling
+          const fresh = await getOrden(orden.id);
+          if (fresh) setOrden(fresh);
+        } catch (err) {
+          console.warn('Error parseando mensaje WebSocket:', err);
         }
-      } catch (e) {
-        // silent background poll
+      };
+
+      ws.onerror = () => {
+        // Fallback a Server-Sent Events (SSE) si WebSocket falla
+        if (!isConnected && typeof EventSource !== 'undefined') {
+          console.log('[PUSH REACTIVO] Activando fallback reactivo SSE...');
+          eventSource = new EventSource(`http://localhost:8086/api/notificaciones/stream/${encodeURIComponent(orden.id)}`);
+          eventSource.onopen = () => setIsLiveReactive(true);
+          eventSource.onmessage = async (e) => {
+            try {
+              const data = JSON.parse(e.data);
+              setLiveNotification(data);
+              const fresh = await getOrden(orden.id);
+              if (fresh) setOrden(fresh);
+            } catch (err) { }
+          };
+        }
+      };
+    } catch (e) {
+      console.warn('WebSockets no soportado o error:', e);
+    }
+
+    // Polling de respaldo de muy baja frecuencia (solo si no hay conexión reactiva activa)
+    const interval = setInterval(async () => {
+      if (!isLiveReactive) {
+        try {
+          const fresh = await getOrden(orden.id);
+          if (fresh && fresh.estado !== orden.estado) {
+            setOrden(fresh);
+          }
+        } catch (e) { }
       }
-    }, 3500);
-    return () => clearInterval(interval);
+    }, 15000);
+
+    return () => {
+      if (ws) ws.close();
+      if (eventSource) eventSource.close();
+      clearInterval(interval);
+      setIsLiveReactive(false);
+    };
   }, [orden?.id, orden?.estado]);
 
   const handleSendIncident = async (e) => {
@@ -168,12 +225,11 @@ export const SeguimientoPage = () => {
                   >
                     <div className="order-chip-top">
                       <span className="order-chip-id">{ord.id}</span>
-                      <span className={`badge ${
-                        ord.estado === 'ENTREGADA' ? 'badge-success' :
-                        ord.estado === 'EN_TRANSITO' ? 'badge-info' :
-                        ord.estado === 'EN_PREPARACION' ? 'badge-orange' :
-                        ord.estado === 'FACTURADA' ? 'badge-info' : 'badge-warning'
-                      }`}>
+                      <span className={`badge ${ord.estado === 'ENTREGADA' ? 'badge-success' :
+                          ord.estado === 'EN_TRANSITO' ? 'badge-info' :
+                            ord.estado === 'EN_PREPARACION' ? 'badge-orange' :
+                              ord.estado === 'FACTURADA' ? 'badge-info' : 'badge-warning'
+                        }`}>
                         {ord.estado}
                       </span>
                     </div>
@@ -214,7 +270,7 @@ export const SeguimientoPage = () => {
                 <span className="tracking-label">Código de Rastreo LogiExpress</span>
                 <span className="tracking-code">{orden.codigoRastreo || 'LEX-849204-GT'}</span>
               </div>
-              <button 
+              <button
                 className="btn-secondary btn-help"
                 onClick={() => setShowHelpModal(true)}
               >
@@ -225,7 +281,41 @@ export const SeguimientoPage = () => {
 
             {/* Timeline Panel */}
             <div className="timeline-panel glass-panel">
-              <h3 className="panel-title">Estado de Transmisión</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 className="panel-title" style={{ margin: 0 }}>Estado de Transmisión</h3>
+                {isLiveReactive ? (
+                  <span style={{
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: '#10b981',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+                    WebSockets Activo (Push Reactivo)
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Polling Respaldo</span>
+                )}
+              </div>
+
+              {liveNotification && (
+                <div style={{
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  fontSize: '0.85rem'
+                }}>
+                  <strong style={{ color: '#60a5fa' }}>{liveNotification.titulo || 'Evento en Vivo'}:</strong> {liveNotification.mensaje}
+                </div>
+              )}
+
               <OrderTimeline timeline={orden.timeline} />
             </div>
 

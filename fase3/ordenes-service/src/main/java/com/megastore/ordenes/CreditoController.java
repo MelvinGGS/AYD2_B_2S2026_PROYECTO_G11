@@ -16,6 +16,9 @@ public class CreditoController {
     private final OrdenRepository ordenRepository;
     private final EventoAuditoriaRepository auditoriaRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
+
     public CreditoController(OrdenRepository ordenRepository,
                              EventoAuditoriaRepository auditoriaRepository) {
         this.ordenRepository = ordenRepository;
@@ -95,6 +98,14 @@ public class CreditoController {
         respuesta.put("mensaje", aprobado 
                 ? "Crédito propio aprobado por 30 días sin intereses" 
                 : "No califica para la campaña Compra ahora, paga en 30 días");
+
+        try {
+            if (rabbitTemplate != null) {
+                rabbitTemplate.convertAndSend("sgologic.exchange", aprobado ? "credito.aprobado" : "credito.rechazado", respuesta);
+            }
+        } catch (Exception e) {
+            System.err.println("Aviso RabbitMQ Credito: No se pudo emitir evento reactivo: " + e.getMessage());
+        }
 
         return ResponseEntity.ok(respuesta);
     }
