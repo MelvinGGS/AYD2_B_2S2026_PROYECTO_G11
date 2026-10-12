@@ -32,6 +32,10 @@
     - [6.1 Pruebas E2E con Cypress](#61-pruebas-e2e-con-cypress)
       - [Uso de mocks (`cy.intercept`)](#uso-de-mocks-cyintercept)
       - [Ejecución local](#ejecución-local)
+    - [6.2 Pruebas de Estrés con k6](#62-pruebas-de-estrés-con-k6)
+      - [Matriz de las 5 pruebas de estrés](#matriz-de-las-5-pruebas-de-estrés)
+      - [Límites evaluados y cumplimiento de QA-1](#límites-evaluados-y-cumplimiento-de-qa-1)
+      - [Comandos de ejecución](#comandos-de-ejecución)
   - [7. CI/CD y despliegue en GCP](#7-cicd-y-despliegue-en-gcp)
     - [Etapas del pipeline](#etapas-del-pipeline)
     - [Secretos de GitHub](#secretos-de-github)
@@ -270,13 +274,13 @@ curl -X POST http://localhost:<puerto>/api/credito/evaluar \
 
 El enunciado exige un mínimo de 5 pruebas por tipo (25 en total). Este manual documenta en detalle las **pruebas E2E**; las demás secciones deben completarse con el material del integrante responsable.
 
-| Tipo                 | Herramienta   | Mínimo | Documentado por              |
-| -------------------- | ------------- | ------ | ---------------------------- |
-| Unitarias            | _(completar)_ | 5      | _(completar)_                |
-| Integración          | _(completar)_ | 5      | _(completar)_                |
-| **End-to-End (E2E)** | **Cypress**   | **5**  | **Integrante 3 (202112109)** |
-| Carga                | _(completar)_ | 5      | _(completar)_                |
-| Estrés               | _(completar)_ | 5      | _(completar)_                |
+| Tipo                 | Herramienta    | Mínimo | Documentado por              |
+| -------------------- | -------------- | ------ | ---------------------------- |
+| Unitarias            | _(completar)_  | 5      | _(completar)_                |
+| Integración          | _(completar)_  | 5      | _(completar)_                |
+| **End-to-End (E2E)** | **Cypress**    | **5**  | **Integrante 3 (202112109)** |
+| Carga                | _(completar)_  | 5      | _(completar)_                |
+| **Estrés**           | **Grafana k6** | **5**  | **Integrante (202000576)**   |
 
 ### 6.1 Pruebas E2E con Cypress
 
@@ -308,6 +312,51 @@ npm install                 # instala Cypress y dependencias
 docker compose up -d        # levanta el sistema
 npx cypress open            # modo interactivo → "E2E Testing"
 npx cypress run             # modo headless (el que usa el pipeline)
+```
+
+---
+
+### 6.2 Pruebas de Estrés con k6
+
+**Responsable:** Carné `202000576`  
+**Ubicación de scripts:** `fase3/pruebas-estres/`  
+**Herramienta:** [Grafana k6](https://k6.io/)
+
+Las pruebas de estrés evalúan los puntos de quiebre, estabilidad bajo concurrencia extrema y resiliencia de la arquitectura SOA + EDA y el estilo reactivo incorporado en la Fase 3.
+
+#### Matriz de las 5 pruebas de estrés
+
+| # | Script | Servicio(s) Afectado(s) | Escenario de Estrés | Límites y Umbral de Aceptación |
+|---|---|---|---|---|
+| **1** | `prueba1_concurrencia_inventario_stock.js` | `ordenes-service` (8081) + `inventario-service` (8082) | **120 VUs concurrentes** compitiendo en ráfaga por el mismo SKU (`PROD-001`). Simula Black Friday extremo. | - **Sin caídas 5xx** (`rate < 0.01`).<br>- Bloqueo optimista (`@Version`) absorbe colisiones sin corrupción.<br>- `p(95) < 800 ms`. |
+| **2** | `prueba2_scoring_credito_bnpl.js` | `ordenes-service` (8081) | **250 VUs pico** evaluando elegibilidad de crédito propio (`POST /api/credito/evaluar`) con clientes elegibles y no elegibles. | - **Driver QA-1 cumplido:** `p(95) < 500 ms` de latencia.<br>- Tasa de error `< 1%`. |
+| **3** | `prueba3_notificaciones_reactivas_stream.js` | `notificaciones-service` (8086) | **200 conexiones SSE concurrentes** emitiendo y recibiendo eventos en tiempo real en Kestrel .NET 8. | - Tasa de fallos `< 2%`.<br>- Tiempo de broadcast `p(95) < 400 ms`.<br>- Cero fuga de descriptores de sockets. |
+| **4** | `prueba4_resiliencia_payklik_circuit_breaker.js` | `pagos-service` (8083) | **200 VUs** enviando transacciones de cobro en ráfagas de alta intensidad hacia la pasarela PayKlik. | - `p(95) < 400 ms`.<br>- Manejo resiliente sin errores 500 catastróficos. |
+| **5** | `prueba5_flujo_integral_omnicanal.js` | Todos (`8081`, `8082`, `8086`) | **200 VUs** ejecutando el flujo completo: Catálogo unificado → Evaluación BNPL → Confirmación de orden → Notificación. | - Duración de flujo E2E `p(95) < 1500 ms`.<br>- Tasa de fallos global `< 2%`. |
+| **Suite** | `suite_estres_k6.js` | Suite Unificada | Ejecución paralela de los 5 escenarios mediante `scenarios` nativos de k6. | - Throughput global > 300 RPS.<br>- `p(95) < 800 ms`. |
+
+#### Límites evaluados y cumplimiento de QA-1
+
+1. **Aislamiento de concurrencia en stock (QA-2):** El bloqueo optimista en `Stock` rechaza ordenadamente las solicitudes excedentes cuando el stock llega a cero, protegiendo la base de datos PostgreSQL de anomalías de lectura y sobreventas.
+2. **Cumplimiento estricto del SLA de Crédito (QA-1):** En la prueba 2, se constata empíricamente que la decisión de crédito propio responde en menos de 500 ms incluso bajo 250 peticiones concurrentes simultáneas.
+3. **Resiliencia reactiva:** El hub de notificaciones en C# .NET 8 procesa ráfagas de eventos sin degradación del servidor Kestrel ni saturación de hilos.
+
+#### Comandos de ejecución
+
+```bash
+cd fase3/pruebas-estres
+
+# Opción A: Usando la imagen oficial de Docker (sin requerir instalación local de k6)
+docker run --rm -i --network host grafana/k6 run - < prueba1_concurrencia_inventario_stock.js
+docker run --rm -i --network host grafana/k6 run - < prueba2_scoring_credito_bnpl.js
+docker run --rm -i --network host grafana/k6 run - < prueba3_notificaciones_reactivas_stream.js
+docker run --rm -i --network host grafana/k6 run - < prueba4_resiliencia_payklik_circuit_breaker.js
+docker run --rm -i --network host grafana/k6 run - < prueba5_flujo_integral_omnicanal.js
+docker run --rm -i --network host grafana/k6 run - < suite_estres_k6.js
+
+# Opción B: Si k6 está instalado localmente
+k6 run prueba1_concurrencia_inventario_stock.js
+k6 run suite_estres_k6.js
 ```
 
 ---
