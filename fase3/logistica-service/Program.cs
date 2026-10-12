@@ -39,6 +39,7 @@ using (var scope = app.Services.CreateScope())
                 ""DireccionDestino"" text NOT NULL,
                 ""CodigoRastreo"" text NOT NULL,
                 ""Estado"" text NOT NULL,
+                ""MetodoPago"" text NOT NULL DEFAULT 'PAYKLIK',
                 ""FechaCreacion"" timestamp with time zone NOT NULL,
                 ""FechaEntrega"" timestamp with time zone
             );
@@ -49,6 +50,7 @@ using (var scope = app.Services.CreateScope())
                 ""UbicacionActual"" text NOT NULL,
                 ""Timestamp"" timestamp with time zone NOT NULL
             );
+            ALTER TABLE ""Despachos"" ADD COLUMN IF NOT EXISTS ""MetodoPago"" text NOT NULL DEFAULT 'PAYKLIK';
         ");
         Console.WriteLine("[LOGISTICA DB] Tablas Despachos y Rastreos verificadas/creadas con exito.");
     }

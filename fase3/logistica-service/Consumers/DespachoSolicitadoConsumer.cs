@@ -94,7 +94,17 @@ namespace LogisticaService.Consumers
 
                 var ordenId = root.TryGetProperty("ordenId", out var ordenProp) ? ordenProp.GetString() : Guid.NewGuid().ToString();
                 var direccion = root.TryGetProperty("direccionDestino", out var dirProp) ? dirProp.GetString() : "Ciudad de Guatemala";
+                var metodoPagoRecibido = root.TryGetProperty("metodoPago", out var metodoProp) && metodoProp.ValueKind == JsonValueKind.String
+                    ? metodoProp.GetString()
+                    : null;
+                var metodoPago = LogisticaManagerService.NormalizarMetodoPago(metodoPagoRecibido);
 
+                if (metodoPago == LogisticaManagerService.MetodoCreditoPropio)
+                {
+                    _logger.LogInformation("Orden {OrdenId} confirmada por Credito Propio a 30 dias, se despacha igual que PayKlik", ordenId);
+                }
+
+                // La seleccion de origen solo depende de la direccion, no del metodo de pago
                 var origen = LogisticaManagerService.DeterminarOrigenOptimo(direccion ?? "Ciudad de Guatemala");
                 var codigoRastreo = "TRACK-" + DateTime.UtcNow.Ticks.ToString().Substring(0, 10) + "-" + Random.Shared.Next(1000, 9999);
 
@@ -106,6 +116,7 @@ namespace LogisticaService.Consumers
                     UbicacionOrigen = origen,
                     CodigoRastreo = codigoRastreo,
                     Estado = "PENDIENTE",
+                    MetodoPago = metodoPago,
                     FechaCreacion = DateTime.UtcNow
                 };
 
@@ -127,7 +138,7 @@ namespace LogisticaService.Consumers
                     await dbContext.SaveChangesAsync();
                 }
 
-                _logger.LogInformation("Despacho creado exitosamente: {Id} con guia {Guia}", despacho.Id, codigoRastreo);
+                _logger.LogInformation("Despacho creado exitosamente: {Id} con guia {Guia} (metodoPago: {MetodoPago})", despacho.Id, codigoRastreo, metodoPago);
                 _channel?.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
             }
             catch (Exception ex)

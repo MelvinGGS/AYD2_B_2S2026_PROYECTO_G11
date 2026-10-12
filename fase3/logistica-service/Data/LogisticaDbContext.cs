@@ -23,6 +23,7 @@ namespace LogisticaService.Data
                 entity.Property(e => e.DireccionDestino).IsRequired();
                 entity.Property(e => e.CodigoRastreo).IsRequired();
                 entity.Property(e => e.Estado).IsRequired();
+                entity.Property(e => e.MetodoPago).IsRequired();
             });
 
             modelBuilder.Entity<Rastreo>(entity =>
