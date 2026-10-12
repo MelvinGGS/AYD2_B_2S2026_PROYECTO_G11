@@ -99,7 +99,13 @@ public class OrdenesService {
             evento.put("direccionDestino", guardada.getDireccion());
             evento.put("estado", guardada.getEstado());
             evento.put("metodoPago", guardada.getMetodoPago() != null ? guardada.getMetodoPago() : "payklik");
-            evento.put("plazoDias", "credito_propio".equalsIgnoreCase(guardada.getMetodoPago()) ? 30 : 0);
+            boolean esCreditoPropio = guardada.getMetodoPago() != null && (
+                    "credito_propio".equalsIgnoreCase(guardada.getMetodoPago()) ||
+                    "CREDITO_PROPIO_30D".equalsIgnoreCase(guardada.getMetodoPago()) ||
+                    guardada.getMetodoPago().toLowerCase().contains("credito") ||
+                    guardada.getMetodoPago().toLowerCase().contains("bnpl")
+            );
+            evento.put("plazoDias", esCreditoPropio ? 30 : 0);
             evento.put("codigoRastreo", guardada.getCodigoRastreo());
             evento.put("fecha", guardada.getFechaCreacion().toString());
             List<Map<String, Object>> itemsList = new ArrayList<>();

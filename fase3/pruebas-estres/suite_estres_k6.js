@@ -143,10 +143,16 @@ export function pruebaFlujoIntegral() {
   // Orden
   const resOrden = http.post(`${HOST_ORDENES}/api/ordenes`, JSON.stringify({
     clienteId: `CLI-${__VU}`,
+    clienteNombre: `Cliente Omnicanal ${__VU}`,
     canal: 'WEB',
     metodoPago: 'PAYKLIK',
     items: [{ id: 'PROD-001', cantidad: 1 }]
   }), { headers: { 'Content-Type': 'application/json' } });
   check(resOrden, { 'Orden procesada': (r) => r.status < 500 });
   sleep(0.2);
+}
+
+// Exportacion por defecto para permitir ejecucion directa con cualquier runner de k6
+export default function () {
+  pruebaFlujoIntegral();
 }
