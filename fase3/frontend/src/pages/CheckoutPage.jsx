@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCircle2, Shield, AlertTriangle, X, CalendarClock, Sparkles, Trash2 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -19,11 +19,9 @@ export const CheckoutPage = () => {
   const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
 
-  React.useEffect(() => {
-    if (!user) {
-      navigate('/login?redirect=/checkout');
-    }
-  }, [user, navigate]);
+  if (!user) {
+    return <Navigate to="/login?redirect=/checkout" replace />;
+  }
 
   const [deliveryType, setDeliveryType] = useState('domicilio');
   const [paymentMethod, setPaymentMethod] = useState('payklik');
@@ -67,9 +65,18 @@ export const CheckoutPage = () => {
         try {
           const evalRes = await evaluarCredito(user.id || '1', total);
           if (isMounted && evalRes) {
-            setCreditoInfo(evalRes);
-            if (evalRes.aprobado) {
+            const elegibleLocal = validarElegibilidadCredito(
+              { creditScore: evalRes.score ?? user.creditScore ?? 80 },
+              total,
+              evalRes.saldoDisponible ?? 3500
+            );
+            const aprobadoFinal = Boolean(evalRes.aprobado && elegibleLocal);
+            const infoNormalizada = { ...evalRes, aprobado: aprobadoFinal };
+            setCreditoInfo(infoNormalizada);
+            if (aprobadoFinal) {
               setPaymentMethod('credito_propio'); // Seleccionar Crédito Propio como opción recomendada si califica
+            } else {
+              setPaymentMethod(prev => (prev === 'credito_propio' ? 'payklik' : prev));
             }
           }
         } catch (e) {
@@ -83,7 +90,14 @@ export const CheckoutPage = () => {
     return () => { isMounted = false; };
   }, [user, total]);
 
-  // Cálculo de vencimiento y detalle comercial BNPL (checkoutUtils)
+  // Cálculo de vencimiento, métodos disponibles y detalle comercial BNPL (checkoutUtils)
+  const metodosDisponibles = React.useMemo(() => {
+    return filtrarMetodosPagoDisponibles(
+      ['payklik', 'transferencia', 'billetera'],
+      Boolean(creditoInfo?.aprobado)
+    );
+  }, [creditoInfo]);
+
   const fechaVencimientoCalculada = React.useMemo(() => {
     try {
       return calcularVencimientoCredito(new Date(), 30);
@@ -283,7 +297,7 @@ export const CheckoutPage = () => {
 
               <div className="payment-methods-list">
                 {/* 1. OPCIÓN DESTACADA: Crédito Propio 'Compra ahora, paga en 30 días' (Fase 3 BNPL) */}
-                {creditoInfo?.aprobado && (
+                {metodosDisponibles.includes('credito_propio') && creditoInfo?.aprobado && (
                   <div
                     className={`payment-method-card ${paymentMethod === 'credito_propio' ? 'selected' : ''}`}
                     style={{
@@ -309,7 +323,7 @@ export const CheckoutPage = () => {
                             </span>
                           </div>
                           <div className="method-desc" style={{ color: 'var(--text-secondary)' }}>
-                            0% interés promocional • Fecha límite de pago: <strong style={{ color: 'var(--orange-hover)' }}>{creditoInfo.fechaVencimiento || 'en 30 días'}</strong>
+                            0% interés promocional • Fecha límite de pago: <strong style={{ color: 'var(--orange-hover)' }}>{creditoInfo.fechaVencimiento || fechaVencimientoCalculada || 'en 30 días'}</strong>
                           </div>
                         </div>
                       </div>
@@ -329,7 +343,12 @@ export const CheckoutPage = () => {
                             Score Crediticio: {creditoInfo.score}/100 (Aprobado)
                           </span>
                         </div>
-                        <p style={{ margin: '0.65rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                        {detalleBNPL && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--orange-hover)', fontWeight: 600 }}>
+                            Condición comercial: {detalleBNPL.descripcion} (Tasa {detalleBNPL.tasaInteres}% / Apertura Q{detalleBNPL.recargoApertura.toFixed(2)})
+                          </div>
+                        )}
+                        <p style={{ margin: '0.45rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
                           Al confirmar, tu orden será procesada y despachada de inmediato. Recibirás un recordatorio en tu correo antes del vencimiento.
                         </p>
                       </div>

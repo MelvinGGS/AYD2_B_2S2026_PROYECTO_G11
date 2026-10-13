@@ -3,13 +3,30 @@ import { Link, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, ShoppingBag, Users, Settings, RefreshCw,
   TrendingUp, AlertTriangle, Clock, CheckCircle2, MoreVertical, Store, LogOut,
-  Search, Filter, ShieldCheck, Database, Layers, ArrowUpRight, CheckCircle, Truck, FileText, LifeBuoy
+  Search, ShieldCheck, FileText, LifeBuoy
 } from 'lucide-react';
-import { getDashboardMetrics, getInventarioUnificado, getClientes, updateEstadoOrden, getIncidencias, FACTURACION_API } from '../services/api';
+import {
+  getDashboardMetrics,
+  getInventarioUnificado,
+  getClientes,
+  updateEstadoOrden,
+  getIncidencias,
+  getModoPayKlik,
+  toggleModoPayKlik,
+  getModoSat,
+  toggleModoSat,
+  getModoInventario,
+  toggleModoInventario,
+  getPagosContingencia,
+  reprocesarPagosContingencia,
+  ajustarStockInventario,
+  FACTURACION_API
+} from '../services/api';
+import { esMetodoCreditoPropio } from '../utils/checkoutUtils';
 import { useAuth } from '../context/AuthContext';
 
 export const DashboardPage = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [metrics, setMetrics] = useState(null);
@@ -18,6 +35,13 @@ export const DashboardPage = () => {
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('TODOS');
   const [orderPaymentFilter, setOrderPaymentFilter] = useState('TODOS');
+  const [modoPayklik, setModoPayklik] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
+  const [modoSat, setModoSat] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
+  const [modoInventario, setModoInventario] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
+  const [modoLogistica, setModoLogistica] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
+  const [modoNotificaciones, setModoNotificaciones] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
+  const [pagosContingencia, setPagosContingencia] = useState([]);
+  const [opsBannerMsg, setOpsBannerMsg] = useState('');
 
   const handleStatusChange = async (ordenId, newStatus) => {
     try {
@@ -30,17 +54,18 @@ export const DashboardPage = () => {
 
   // Datos de reserva inicial
   const defaultInventario = [
-    { sku: 'SKU-EPR-001', producto: 'Cafetera Espresso Serie X', cdNorte: 15, cdSur: 8, tiendas: 42, total: 65, estado: 'Óptimo' },
-    { sku: 'SKU-REF-002', producto: 'Refrigerador Multi-Door 24 cu.ft', cdNorte: 2, cdSur: 1, tiendas: 5, total: 8, estado: 'Crítico' },
-    { sku: 'SKU-ROB-003', producto: 'Robot Aspirador Laser LiDAR', cdNorte: 25, cdSur: 18, tiendas: 60, total: 103, estado: 'Óptimo' },
-    { sku: 'SKU-SMA-004', producto: 'Smartwatch V3 Pro AMOLED', cdNorte: 40, cdSur: 32, tiendas: 110, total: 182, estado: 'Óptimo' },
-    { sku: 'SKU-AUR-005', producto: 'Auriculares Noise Cancelling Pro', cdNorte: 10, cdSur: 5, tiendas: 18, total: 33, estado: 'Bajo' },
-    { sku: 'SKU-OLED-006', producto: 'Smart TV OLED 4K 65"', cdNorte: 4, cdSur: 3, tiendas: 9, total: 16, estado: 'Bajo' }
+    { id: 'prod-001', sku: 'SKU-EPR-001', producto: 'Cafetera Espresso Serie X', cdNorte: 15, cdSur: 8, tiendas: 42, total: 65, estado: 'Óptimo' },
+    { id: 'prod-002', sku: 'SKU-REF-002', producto: 'Refrigerador Multi-Door 24 cu.ft', cdNorte: 2, cdSur: 1, tiendas: 5, total: 8, estado: 'Crítico' },
+    { id: 'prod-003', sku: 'SKU-ROB-003', producto: 'Robot Aspirador Laser LiDAR', cdNorte: 25, cdSur: 18, tiendas: 60, total: 103, estado: 'Óptimo' },
+    { id: 'prod-004', sku: 'SKU-SMA-004', producto: 'Smartwatch V3 Pro AMOLED', cdNorte: 40, cdSur: 32, tiendas: 110, total: 182, estado: 'Óptimo' },
+    { id: 'prod-005', sku: 'SKU-AUR-005', producto: 'Auriculares Noise Cancelling Pro', cdNorte: 10, cdSur: 5, tiendas: 18, total: 33, estado: 'Bajo' },
+    { id: 'prod-006', sku: 'SKU-OLED-006', producto: 'Smart TV OLED 4K 65"', cdNorte: 4, cdSur: 3, tiendas: 9, total: 16, estado: 'Bajo' }
   ];
 
   const defaultClientes = [
-    { id: 'CLI-1', nombre: 'Carlos Aragon', email: 'cliente@megastore.com', canal: 'Web Store', ordenes: 1, totalGasto: 227.79, estado: 'Activo' },
-    { id: 'CLI-2', nombre: 'Administrador Ops', email: 'admin@megastore.com', canal: 'Call Center', ordenes: 0, totalGasto: 0.00, estado: 'Activo' }
+    { id: 'CLI-1', nombre: 'Melvin Garcia', email: 'cliente@megastore.com', canal: 'Web Store', ordenes: 1, totalGasto: 227.79, score: 85, aptoBnpl: true, saldoDeudor: 0, saldoDisponible: 5000, estado: 'Activo' },
+    { id: 'CLI-2', nombre: 'Roberto Morales', email: 'riesgo@megastore.com', canal: 'Web Store', ordenes: 0, totalGasto: 0.00, score: 55, aptoBnpl: false, saldoDeudor: 0, saldoDisponible: 5000, estado: 'Riesgo Crediticio' },
+    { id: 'CLI-3', nombre: 'Administrador Ops', email: 'admin@megastore.com', canal: 'Call Center', ordenes: 0, totalGasto: 0.00, score: 100, aptoBnpl: true, saldoDeudor: 0, saldoDisponible: 5000, estado: 'Admin Ops' }
   ];
 
   const [inventario, setInventario] = useState(defaultInventario);
@@ -50,24 +75,32 @@ export const DashboardPage = () => {
   const fetchMetrics = async () => {
     setLoading(true);
     try {
-      const [dataMetrics, dataInventario, dataClientes, dataIncidencias] = await Promise.all([
+      const [dataMetrics, dataInventario, dataClientes, dataIncidencias, dataModoPk, dataContingencia, dataModoSat, dataModoInv] = await Promise.all([
         getDashboardMetrics(),
         getInventarioUnificado(),
         getClientes(),
-        getIncidencias()
+        getIncidencias(),
+        getModoPayKlik(),
+        getPagosContingencia(),
+        getModoSat(),
+        getModoInventario()
       ]);
       setMetrics(dataMetrics);
+      if (dataModoPk) setModoPayklik(dataModoPk);
+      if (dataModoSat) setModoSat(dataModoSat);
+      if (dataModoInv) setModoInventario(dataModoInv);
+      if (Array.isArray(dataContingencia)) setPagosContingencia(dataContingencia);
       if (dataInventario && dataInventario.length > 0) {
         setInventario(dataInventario);
       }
-      if (dataIncidencias && dataIncidencias.length > 0) {
+      if (dataIncidencias) {
         setIncidencias(dataIncidencias);
       }
       if (dataClientes && dataClientes.length > 0) {
         const enriched = dataClientes.map(c => ({
           ...c,
-          ordenes: c.ordenes || 1,
-          totalGasto: typeof c.totalGasto === 'number' ? c.totalGasto : 189.99
+          ordenes: typeof c.ordenes === 'number' ? c.ordenes : 0,
+          totalGasto: typeof c.totalGasto === 'number' ? c.totalGasto : 0.00
         }));
         setClientes(enriched);
       }
@@ -75,6 +108,96 @@ export const DashboardPage = () => {
       console.error('Error cargando datos del dashboard:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReabastecerStock = async (item, idx) => {
+    const prodId = item.id || `prod-00${idx + 1}`;
+    try {
+      await ajustarStockInventario(prodId, 'CD_NORTE', 10);
+      setOpsBannerMsg(`Stock incrementado (+10 uds en CD Norte) para ${item.sku} - ${item.producto}.`);
+      await fetchMetrics();
+      setTimeout(() => setOpsBannerMsg(''), 4000);
+    } catch (err) {
+      setOpsBannerMsg(`Error al ajustar stock: ${err.message}`);
+    }
+  };
+
+  const handleTogglePayklikMode = async () => {
+    try {
+      const nextState = !modoPayklik.deshabilitado;
+      const res = await toggleModoPayKlik(nextState);
+      setModoPayklik(res);
+      setOpsBannerMsg(
+        res.deshabilitado
+          ? 'Pasarela PayKlik DESHABILITADA: Los nuevos cobros con tarjeta activaran el Circuit Breaker y se encolaran en RabbitMQ DLQ.'
+          : 'Pasarela PayKlik HABILITADA: Servicio en linea.'
+      );
+      await fetchMetrics();
+    } catch (err) {
+      setOpsBannerMsg('No se pudo conectar con pagos-service (:8083): Contenedor fuera de linea.');
+    }
+  };
+
+  const handleToggleSatMode = async () => {
+    try {
+      const nextState = !modoSat.deshabilitado;
+      const res = await toggleModoSat(nextState);
+      setModoSat(res);
+      setOpsBannerMsg(
+        res.deshabilitado
+          ? 'Certificador SAT FEL DESHABILITADO: Modo contingencia activado; emision de DTE diferida.'
+          : 'Certificador SAT FEL HABILITADO: Emision y validacion de DTE en linea.'
+      );
+      await fetchMetrics();
+    } catch (err) {
+      setOpsBannerMsg('No se pudo conectar con facturacion-service (:8084).');
+    }
+  };
+
+  const handleToggleInventarioMode = async () => {
+    try {
+      const nextState = !modoInventario.deshabilitado;
+      const res = await toggleModoInventario(nextState);
+      setModoInventario(res);
+      setOpsBannerMsg(
+        res.deshabilitado
+          ? 'Reserva de Inventario DESHABILITADA: Modo auditoria de stock activado.'
+          : 'Reserva de Inventario HABILITADA: Descuento y bloqueo optimista en linea.'
+      );
+      await fetchMetrics();
+    } catch (err) {
+      setOpsBannerMsg('No se pudo conectar con inventario-service (:8082).');
+    }
+  };
+
+  const handleToggleLogisticaMode = () => {
+    const nextState = !modoLogistica.deshabilitado;
+    setModoLogistica({ deshabilitado: nextState, estadoServicio: nextState ? 'DESHABILITADO' : 'HABILITADO' });
+    setOpsBannerMsg(
+      nextState
+        ? 'Generador de Guias LogiExpress DESHABILITADO: Despachos retenidos en cola de asignacion.'
+        : 'Generador de Guias LogiExpress HABILITADO: Asignacion automatica de guias LEX-GT activa.'
+    );
+  };
+
+  const handleToggleNotificacionesMode = () => {
+    const nextState = !modoNotificaciones.deshabilitado;
+    setModoNotificaciones({ deshabilitado: nextState, estadoServicio: nextState ? 'DESHABILITADO' : 'HABILITADO' });
+    setOpsBannerMsg(
+      nextState
+        ? 'Canal de Notificaciones SSE DESHABILITADO: Modo silencioso de eventos activado.'
+        : 'Canal de Notificaciones SSE HABILITADO: Streaming reactivo Server-Sent Events en linea.'
+    );
+  };
+
+  const handleReprocesarDlq = async () => {
+    try {
+      const res = await reprocesarPagosContingencia();
+      setOpsBannerMsg(`Cola DLQ reprocesada exitosamente: ${res.reprocesados || 0} pagos recuperados y enviados a facturación SAT.`);
+      await fetchMetrics();
+    } catch (err) {
+      setOpsBannerMsg(`Error al reprocesar DLQ: ${err.message}`);
     }
   };
 
@@ -124,7 +247,10 @@ export const DashboardPage = () => {
       case 'Enviado': return <span className="badge badge-info">En tránsito</span>;
       case 'ENTREGADA': return <span className="badge badge-success">Entregada</span>;
       case 'FACTURADA': return <span className="badge badge-info">Facturada</span>;
-      case 'CANCELADA': return <span className="badge badge-error">Cancelada</span>;
+      case 'PAGADA': return <span className="badge badge-info">Pagada</span>;
+      case 'PAGO_EN_CONTINGENCIA': return <span className="badge badge-warning">Contingencia DLQ</span>;
+      case 'CANCELADA':
+      case 'INVENTARIO_INSUFICIENTE': return <span className="badge badge-error">Cancelada</span>;
       default: return <span className="badge badge-warning">Procesando</span>;
     }
   };
@@ -135,9 +261,7 @@ export const DashboardPage = () => {
     const s = orderSearch.toLowerCase();
     const matchesSearch = oId.includes(s) || oClient.includes(s);
     const matchesFilter = orderStatusFilter === 'TODOS' || o.estado === orderStatusFilter;
-    const isCredito = o.metodoPago === 'credito_propio' ||
-      o.metodoPago === 'CREDITO_PROPIO_30D' ||
-      (typeof o.metodoPago === 'string' && o.metodoPago.toLowerCase().includes('credito'));
+    const isCredito = esMetodoCreditoPropio(o.metodoPago);
     const matchesPayment = orderPaymentFilter === 'TODOS' ||
       (orderPaymentFilter === 'credito_propio' ? isCredito : !isCredito);
     return matchesSearch && matchesFilter && matchesPayment;
@@ -266,6 +390,24 @@ export const DashboardPage = () => {
           </div>
         </header>
 
+        {opsBannerMsg && (
+          <div
+            className="glass-panel"
+            style={{
+              marginBottom: '1rem',
+              padding: '0.85rem 1.15rem',
+              borderLeft: '4px solid var(--orange-primary)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(249, 115, 22, 0.1)'
+            }}
+          >
+            <span style={{ fontSize: '0.88rem', color: 'var(--text-main)' }}>{opsBannerMsg}</span>
+            <button onClick={() => setOpsBannerMsg('')} className="btn-secondary btn-sm">Cerrar</button>
+          </div>
+        )}
+
         {loading ? (
           <div className="loading-container glass-panel">
             <div className="spinner"></div>
@@ -309,7 +451,7 @@ export const DashboardPage = () => {
                     </div>
                     <div className="metric-value text-error">{metrics?.alertasActivas}</div>
                     <div className="metric-footer text-error">
-                      <span>SAT latencia elevada</span>
+                      <span>{metrics?.alertasActivas > 0 ? 'Contingencia o cola DLQ activa' : 'Todos los servicios estables'}</span>
                     </div>
                   </div>
 
@@ -320,7 +462,7 @@ export const DashboardPage = () => {
                     </div>
                     <div className="metric-value">{metrics?.ingresosHoy}</div>
                     <div className="metric-footer text-success">
-                      <span>+8.4% vs meta diaria</span>
+                      <span>Facturación conciliada</span>
                     </div>
                   </div>
                 </section>
@@ -381,7 +523,7 @@ export const DashboardPage = () => {
                               <span className="system-name">{sys.nombre}</span>
                             </div>
                             <div className="system-meta">
-                              <span className={`badge ${sys.statusType === 'success' ? 'badge-success' : 'badge-warning'}`}>
+                              <span className={`badge ${sys.statusType === 'success' ? 'badge-success' : 'badge-error'}`}>
                                 {sys.estado}
                               </span>
                               <span className="system-lat">{sys.latencia}</span>
@@ -394,20 +536,20 @@ export const DashboardPage = () => {
                     <section className="inventory-critical-card glass-panel">
                       <h3>Inventario Crítico en Almacén</h3>
                       <div className="critical-list">
-                        <div className="critical-item">
-                          <div>
-                            <span className="sku-code">SKU-A892</span>
-                            <span className="sku-name">Refrigerador Multi-Door</span>
-                          </div>
-                          <span className="stock-alert-tag text-error">3 unidades</span>
-                        </div>
-                        <div className="critical-item">
-                          <div>
-                            <span className="sku-code">SKU-C114</span>
-                            <span className="sku-name">Smart TV OLED 65"</span>
-                          </div>
-                          <span className="stock-alert-tag text-warning">7 unidades</span>
-                        </div>
+                        {inventario
+                          .filter(item => item.estado !== 'Óptimo' || item.total <= 20)
+                          .slice(0, 3)
+                          .map((item, idx) => (
+                            <div key={idx} className="critical-item">
+                              <div>
+                                <span className="sku-code">{item.sku}</span>
+                                <span className="sku-name">{item.producto}</span>
+                              </div>
+                              <span className={`stock-alert-tag ${item.total <= 10 ? 'text-error' : 'text-warning'}`}>
+                                {item.total} unidades
+                              </span>
+                            </div>
+                          ))}
                       </div>
                     </section>
                   </div>
@@ -437,6 +579,7 @@ export const DashboardPage = () => {
                         <th>32 Tiendas POS</th>
                         <th>Stock Total</th>
                         <th>Estado Stock</th>
+                        <th className="text-right">Reabastecimiento</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -452,6 +595,16 @@ export const DashboardPage = () => {
                             <span className={`badge ${item.estado === 'Óptimo' ? 'badge-success' : item.estado === 'Bajo' ? 'badge-warning' : 'badge-error'}`}>
                               {item.estado}
                             </span>
+                          </td>
+                          <td className="text-right">
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => handleReabastecerStock(item, idx)}
+                              title="Ingresar lote de +10 unidades al Centro de Distribución Norte"
+                            >
+                              +10 CD Norte
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -492,10 +645,12 @@ export const DashboardPage = () => {
                   >
                     <option value="TODOS">Todos los estados</option>
                     <option value="CREADA">Creada</option>
+                    <option value="PAGO_EN_CONTINGENCIA">En Contingencia (DLQ)</option>
                     <option value="PAGADA">Pagada</option>
                     <option value="EN_PREPARACION">En Preparación</option>
                     <option value="EN_TRANSITO">En Tránsito</option>
                     <option value="ENTREGADA">Entregada</option>
+                    <option value="CANCELADA">Cancelada</option>
                   </select>
 
                   <select
@@ -525,61 +680,73 @@ export const DashboardPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredOrders.map((ord) => (
-                        <tr key={ord.id}>
-                          <td className="font-mono text-orange">{ord.id}</td>
-                          <td>{new Date(ord.fechaCreacion || ord.fecha || Date.now()).toLocaleDateString()}</td>
-                          <td className="font-bold">{ord.clienteNombre || ord.cliente || 'Cliente Omnicanal'}</td>
-                          <td><span className="channel-tag">{ord.canal || 'Web Store'}</span></td>
-                          <td className="font-label-sm">
-                            {(ord.metodoPago === 'credito_propio' || ord.metodoPago === 'CREDITO_PROPIO_30D' || (typeof ord.metodoPago === 'string' && ord.metodoPago.toLowerCase().includes('credito'))) ? (
-                              <span className="badge badge-warning" style={{ background: 'rgba(255, 107, 0, 0.15)', color: 'var(--orange-primary)', border: '1px solid rgba(255, 107, 0, 0.35)', fontWeight: 600 }}>
-                                Crédito Propio (30d)
-                              </span>
-                            ) : (
-                              ord.metodoPago || 'PayKlik'
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                              {getStatusBadge(ord.estado)}
-                              <select
-                                value={ord.estado}
-                                onChange={(e) => handleStatusChange(ord.id, e.target.value)}
-                                className="form-input"
-                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', width: 'auto', background: 'var(--bg-card-solid)' }}
-                                title="Actualizar estado operativo"
-                              >
-                                <option value="CREADA">Cambiar: Creada</option>
-                                <option value="PAGADA">Cambiar: Pagada</option>
-                                <option value="FACTURADA">Cambiar: Facturada</option>
-                                <option value="EN_PREPARACION">Cambiar: En preparación</option>
-                                <option value="EN_TRANSITO">Cambiar: En tránsito</option>
-                                <option value="ENTREGADA">Cambiar: Entregada</option>
-                                <option value="CANCELADA">Cambiar: Cancelada</option>
-                              </select>
-                            </div>
-                          </td>
-                          <td className="font-bold">${(Number(ord.total) || 0).toFixed(2)}</td>
-                          <td className="text-right">
-                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                              <Link to={`/seguimiento/${ord.id}`} className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
-                                Ver Tracking
-                              </Link>
-                              <a
-                                href={`${FACTURACION_API}/orden/${ord.id}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="btn-secondary btn-sm"
-                                style={{ textDecoration: 'none', color: 'var(--orange-primary)' }}
-                                title="Descargar comprobante fiscal SAT FEL XML"
-                              >
-                                Factura XML
-                              </a>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredOrders.map((ord) => {
+                        const esEstadoFinal = ord.estado === 'ENTREGADA' || ord.estado === 'CANCELADA';
+                        return (
+                          <tr key={ord.id}>
+                            <td className="font-mono text-orange">{ord.id}</td>
+                            <td>{new Date(ord.fechaCreacion || ord.fecha || Date.now()).toLocaleDateString()}</td>
+                            <td className="font-bold">{ord.clienteNombre || ord.cliente || 'Cliente Omnicanal'}</td>
+                            <td><span className="channel-tag">{ord.canal || 'Web Store'}</span></td>
+                            <td className="font-label-sm">
+                              {esMetodoCreditoPropio(ord.metodoPago) ? (
+                                <span className="badge badge-warning" style={{ background: 'rgba(255, 107, 0, 0.15)', color: 'var(--orange-primary)', border: '1px solid rgba(255, 107, 0, 0.35)', fontWeight: 600 }}>
+                                  Crédito Propio (30d)
+                                </span>
+                              ) : (
+                                ord.metodoPago || 'PayKlik'
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                {getStatusBadge(ord.estado)}
+                                <select
+                                  value={ord.estado}
+                                  disabled={esEstadoFinal}
+                                  onChange={(e) => handleStatusChange(ord.id, e.target.value)}
+                                  className="form-input"
+                                  style={{
+                                    padding: '0.2rem 0.4rem',
+                                    fontSize: '0.75rem',
+                                    width: 'auto',
+                                    background: 'var(--bg-card-solid)',
+                                    opacity: esEstadoFinal ? 0.55 : 1,
+                                    cursor: esEstadoFinal ? 'not-allowed' : 'pointer'
+                                  }}
+                                  title="Actualizar estado operativo"
+                                >
+                                  <option value="CREADA">Cambiar: Creada</option>
+                                  <option value="PAGO_EN_CONTINGENCIA">Cambiar: Contingencia DLQ</option>
+                                  <option value="PAGADA">Cambiar: Pagada</option>
+                                  <option value="FACTURADA">Cambiar: Facturada</option>
+                                  <option value="EN_PREPARACION">Cambiar: En preparación</option>
+                                  <option value="EN_TRANSITO">Cambiar: En tránsito</option>
+                                  <option value="ENTREGADA">Cambiar: Entregada</option>
+                                  <option value="CANCELADA">Cambiar: Cancelada</option>
+                                </select>
+                              </div>
+                            </td>
+                            <td className="font-bold">${(Number(ord.total) || 0).toFixed(2)}</td>
+                            <td className="text-right">
+                              <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                <Link to={`/seguimiento/${ord.id}`} className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
+                                  Ver Tracking
+                                </Link>
+                                <a
+                                  href={`${FACTURACION_API}/orden/${ord.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn-secondary btn-sm"
+                                  style={{ textDecoration: 'none', color: 'var(--orange-primary)' }}
+                                  title="Descargar comprobante fiscal SAT FEL XML"
+                                >
+                                  Factura XML
+                                </a>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -592,9 +759,9 @@ export const DashboardPage = () => {
                 <div className="tab-pane-header">
                   <div>
                     <h2>Directorio Unificado de Clientes</h2>
-                    <p>Historial y comportamiento del cliente en todos los canales comerciales.</p>
+                    <p>Historial comercial, scoring crediticio BNPL (30 días) y saldo disponible en todos los canales.</p>
                   </div>
-                  <span className="badge badge-info">5 Clientes Registrados</span>
+                  <span className="badge badge-info">{clientes.length} Clientes Registrados</span>
                 </div>
 
                 <div className="table-responsive">
@@ -604,9 +771,11 @@ export const DashboardPage = () => {
                         <th>ID Cliente</th>
                         <th>Nombre</th>
                         <th>Correo electrónico</th>
-                        <th>Canal Preferido</th>
+                        <th>Canal</th>
                         <th>Órdenes</th>
                         <th>Total Invertido</th>
+                        <th>Scoring BNPL (30d)</th>
+                        <th>Cupo Disponible</th>
                         <th>Clasificación</th>
                       </tr>
                     </thead>
@@ -618,9 +787,22 @@ export const DashboardPage = () => {
                           <td>{cli.email}</td>
                           <td><span className="channel-tag">{cli.canal}</span></td>
                           <td>{cli.ordenes} compras</td>
-                          <td className="font-bold text-orange">${cli.totalGasto.toFixed(2)}</td>
+                          <td className="font-bold text-orange">${(Number(cli.totalGasto) || 0).toFixed(2)}</td>
                           <td>
-                            <span className={`badge ${cli.estado === 'VIP' ? 'badge-orange' : cli.estado === 'Nuevo' ? 'badge-info' : 'badge-success'}`}>
+                            <span className={`badge ${(cli.score ?? 85) >= 70 ? 'badge-success' : 'badge-error'}`}>
+                              {cli.score ?? 85}/100 ({(cli.score ?? 85) >= 70 ? 'Apto' : 'No Apto'})
+                            </span>
+                          </td>
+                          <td className="font-mono">
+                            ${Number(cli.saldoDisponible ?? 5000).toFixed(2)}
+                            {Number(cli.saldoDeudor || 0) > 0 && (
+                              <span style={{ display: 'block', fontSize: '0.72rem', color: '#fbbf24' }}>
+                                Deuda: ${Number(cli.saldoDeudor).toFixed(2)}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`badge ${cli.estado === 'VIP' ? 'badge-orange' : cli.estado === 'Riesgo Crediticio' ? 'badge-error' : 'badge-success'}`}>
                               {cli.estado}
                             </span>
                           </td>
@@ -691,65 +873,146 @@ export const DashboardPage = () => {
               </div>
             )}
 
-            {/* TAB 5: CONFIGURACIÓN */}
+            {/* TAB 5: CONFIGURACIÓN Y RESILIENCIA DE MICROSERVICIOS */}
             {activeTab === 'config' && (
               <div className="tab-pane-container glass-panel">
                 <div className="tab-pane-header">
                   <div>
-                    <h2>Parámetros y Restricciones SGO-Logic</h2>
-                    <p>Ajustes técnicos de resiliencia, temporizadores y conectores legacy.</p>
+                    <h2>Panel de Control de Disponibilidad y Resiliencia (Deshabilitar / Habilitar)</h2>
+                    <p>Gestiona en tiempo real la disponibilidad de cada microservicio, simula fallos y prueba la tolerancia a caidas con colas RabbitMQ y DLQ.</p>
                   </div>
                 </div>
 
                 <div className="config-grid">
+                  {/* SERVICIO 1: PAGOS Y PAYKLIK */}
                   <div className="config-card">
-                    <h4>Temporizador de Reserva Stock</h4>
-                    <p>Tiempo de bloqueo automático de unidades al iniciar checkout para prevenir sobreventas.</p>
-                    <div className="config-field">
-                      <label className="form-label">Minutos de reserva:</label>
-                      <input type="number" className="form-input" defaultValue={15} />
+                    <h4>1. Pasarela de Pagos PayKlik (pagos-service:8083)</h4>
+                    <p>Control del servicio externo de cobro. Al deshabilitarse, los pagos con tarjeta activan el Circuit Breaker y se encolan en la DLQ de RabbitMQ.</p>
+                    <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Estado del servicio:</span>
+                      <span className={`badge ${modoPayklik.deshabilitado ? 'badge-error' : 'badge-success'}`}>
+                        {modoPayklik.deshabilitado ? 'DESHABILITADO (CONTINGENCIA DLQ)' : 'HABILITADO (OPERATIVO)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={handleTogglePayklikMode}
+                        className={modoPayklik.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+                        style={!modoPayklik.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
+                      >
+                        {modoPayklik.deshabilitado ? 'Habilitar Pasarela PayKlik' : 'Deshabilitar Pasarela PayKlik'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleReprocesarDlq}
+                        className="btn-secondary btn-sm"
+                        disabled={pagosContingencia.length === 0}
+                        style={{ borderColor: '#10b981', color: '#34d399' }}
+                      >
+                        Drenar y Reprocesar DLQ ({pagosContingencia.length})
+                      </button>
                     </div>
                   </div>
 
+                  {/* SERVICIO 2: FACTURACIÓN FEL Y AS/400 */}
                   <div className="config-card">
-                    <h4>Sincronizador AS/400 (ERP Legacy)</h4>
-                    <p>Frecuencia de generación y transmisión de archivos conciliados CSV/XML (Restricción RC-01 / ADR-005).</p>
-                    <div className="config-field">
-                      <label className="form-label">Intervalo en minutos:</label>
-                      <input type="number" className="form-input" defaultValue={30} />
+                    <h4>2. Certificador SAT FEL & AS/400 (facturacion-service:8084)</h4>
+                    <p>Emision de facturas electronicas DTE y enlace contable con el ERP legado IBM iSeries AS/400.</p>
+                    <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Estado del certificador:</span>
+                      <span className={`badge ${modoSat.deshabilitado ? 'badge-error' : 'badge-success'}`}>
+                        {modoSat.deshabilitado ? 'DESHABILITADO (BUFFER DIFERIDO)' : 'HABILITADO (CERTIFICACION SAT)'}
+                      </span>
                     </div>
-                    <div style={{ marginTop: '0.85rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={handleToggleSatMode}
+                        className={modoSat.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+                        style={!modoSat.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
+                      >
+                        {modoSat.deshabilitado ? 'Habilitar Facturacion SAT' : 'Deshabilitar Facturacion SAT'}
+                      </button>
+
                       <a
                         href={`${FACTURACION_API}/as400/ultimo-csv`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-secondary btn-sm"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
-                        title="Descargar último archivo CSV conciliado para el ERP AS/400"
+                        title="Descargar ultimo archivo CSV conciliado para el ERP AS/400"
                       >
                         <FileText size={14} className="icon-orange" />
-                        <span>Descargar Último Lote AS/400 (.csv)</span>
+                        <span>Exportar Lote AS/400 (.csv)</span>
                       </a>
                     </div>
                   </div>
 
+                  {/* SERVICIO 3: INVENTARIO */}
                   <div className="config-card">
-                    <h4>Pasarela PayKlik Resiliencia</h4>
-                    <p>Umbral de latencia para desviar solicitudes a la cola desacoplada (Outbox pattern).</p>
-                    <div className="config-field">
-                      <label className="form-label">Timeout máximo (segundos):</label>
-                      <input type="number" className="form-input" defaultValue={5} />
+                    <h4>3. Servicio Central de Inventario (inventario-service:8082)</h4>
+                    <p>Gestion de stock omnicanal (CD Norte, CD Sur y tiendas POS) con bloqueo optimista de 15 minutos.</p>
+                    <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Reserva en tiempo real:</span>
+                      <span className={`badge ${modoInventario.deshabilitado ? 'badge-error' : 'badge-success'}`}>
+                        {modoInventario.deshabilitado ? 'DESHABILITADO (MODO AUDITORIA)' : 'HABILITADO (EN LINEA)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={handleToggleInventarioMode}
+                        className={modoInventario.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+                        style={!modoInventario.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
+                      >
+                        {modoInventario.deshabilitado ? 'Habilitar Reserva Stock' : 'Deshabilitar Reserva Stock'}
+                      </button>
                     </div>
                   </div>
 
+                  {/* SERVICIO 4: LOGÍSTICA */}
                   <div className="config-card">
-                    <h4>Conector SAT Facturación XML</h4>
-                    <p>Modo asíncrono de reintentos en caso de caídas o latencias en la SAT.</p>
-                    <div className="config-field">
-                      <label className="checkbox-label">
-                        <input type="checkbox" defaultChecked />
-                        <span>Activar desacople de facturación asíncrona</span>
-                      </label>
+                    <h4>4. Servicio Courier LogiExpress (logistica-service:8085)</h4>
+                    <p>Despacho inteligente y emision automatica de codigos de rastreo LEX-GT para entregas y pickup.</p>
+                    <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Generador de guias:</span>
+                      <span className={`badge ${modoLogistica.deshabilitado ? 'badge-error' : 'badge-success'}`}>
+                        {modoLogistica.deshabilitado ? 'DESHABILITADO (DESPACHO EN ESPERA)' : 'HABILITADO (OPERATIVO)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={handleToggleLogisticaMode}
+                        className={modoLogistica.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+                        style={!modoLogistica.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
+                      >
+                        {modoLogistica.deshabilitado ? 'Habilitar Despacho' : 'Deshabilitar Despacho'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SERVICIO 5: NOTIFICACIONES REACTIVAS SSE */}
+                  <div className="config-card">
+                    <h4>5. Notificaciones Push SSE (notificaciones-service:8086)</h4>
+                    <p>Bus reactivo de eventos hacia clientes Web/Mobile via Server-Sent Events y WebSockets (.NET 8).</p>
+                    <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Canal de difusion:</span>
+                      <span className={`badge ${modoNotificaciones.deshabilitado ? 'badge-error' : 'badge-success'}`}>
+                        {modoNotificaciones.deshabilitado ? 'DESHABILITADO (MODO SILENCIOSO)' : 'HABILITADO (STREAMING ACTIVO)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={handleToggleNotificacionesMode}
+                        className={modoNotificaciones.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+                        style={!modoNotificaciones.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
+                      >
+                        {modoNotificaciones.deshabilitado ? 'Habilitar Streaming SSE' : 'Deshabilitar Streaming SSE'}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -762,3 +1025,4 @@ export const DashboardPage = () => {
     </div>
   );
 };
+

@@ -57,19 +57,27 @@ export const Navbar = ({ hideSearch = false, hideLinks = false }) => {
               <Link to="/catalogo?ofertas=true" className="nav-link nav-ofertas">
                 Ofertas
               </Link>
-              <Link to="/seguimiento" className="nav-link">
-                <Package size={16} /> Mis Pedidos
-              </Link>
+              {user && (
+                <Link to="/seguimiento" className="nav-link">
+                  <Package size={16} /> Mis Pedidos
+                </Link>
+              )}
             </nav>
           )}
 
           {/* Action Icons & User */}
           <div className="navbar-actions">
             {/* Cart Icon */}
-            <Link to="/carrito" className="icon-btn cart-btn" title="Ver Carrito">
-              <ShoppingCart size={22} />
-              {totalCount > 0 && <span className="cart-badge">{totalCount}</span>}
-            </Link>
+            {user ? (
+              <Link to="/carrito" className="icon-btn cart-btn" title="Ver Carrito">
+                <ShoppingCart size={22} />
+                {totalCount > 0 && <span className="cart-badge">{totalCount}</span>}
+              </Link>
+            ) : (
+              <Link to="/login?redirect=/carrito" className="icon-btn cart-btn" title="Iniciar sesión para acceder al carrito">
+                <ShoppingCart size={22} />
+              </Link>
+            )}
 
             {/* User Auth Info */}
             {user ? (

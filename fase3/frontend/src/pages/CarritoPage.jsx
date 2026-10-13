@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { ShoppingBag, ArrowRight, RefreshCw, Lock, Tag, ArrowLeft } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { CartItem } from '../components/CartItem';
@@ -11,15 +11,15 @@ export const CarritoPage = () => {
   const { cartItems, totalCount, subtotal } = useCart();
   const { user } = useAuth();
   const [discountCode, setDiscountCode] = useState('');
-  const [discountApplied, setDiscountApplied] = useState(15.00);
+  const [discountApplied, setDiscountApplied] = useState(0.00);
   const navigate = useNavigate();
 
+  if (!user) {
+    return <Navigate to="/login?redirect=/carrito" replace />;
+  }
+
   const handleProceedToCheckout = () => {
-    if (!user) {
-      navigate('/login?redirect=/checkout');
-    } else {
-      navigate('/checkout');
-    }
+    navigate('/checkout');
   };
 
   const handleApplyCoupon = (e) => {
@@ -29,8 +29,9 @@ export const CarritoPage = () => {
     }
   };
 
-  const shippingCost = subtotal > 150 ? 0.00 : 15.00;
-  const grandTotal = Math.max(0, subtotal - discountApplied + shippingCost);
+  const taxes = +(subtotal * 0.12).toFixed(2);
+  const shippingCost = 15.00;
+  const grandTotal = Math.max(0, +(subtotal + taxes - discountApplied + shippingCost).toFixed(2));
 
   return (
     <div className="app-container">
@@ -103,13 +104,20 @@ export const CarritoPage = () => {
                     <span className="summary-value">${subtotal.toFixed(2)}</span>
                   </div>
 
-                  <div className="summary-row text-orange">
-                    <span>Descuento aplicado</span>
-                    <span className="summary-value">-${discountApplied.toFixed(2)}</span>
+                  <div className="summary-row">
+                    <span>Impuestos (12% IVA)</span>
+                    <span className="summary-value">${taxes.toFixed(2)}</span>
                   </div>
 
+                  {discountApplied > 0 && (
+                    <div className="summary-row text-orange">
+                      <span>Descuento aplicado</span>
+                      <span className="summary-value">-${discountApplied.toFixed(2)}</span>
+                    </div>
+                  )}
+
                   <div className="summary-row">
-                    <span>Envío estimado</span>
+                    <span>Envío estimado (Domicilio)</span>
                     <span className="summary-value">
                       {shippingCost === 0 ? 'Gratis' : `$${shippingCost.toFixed(2)}`}
                     </span>
@@ -120,7 +128,7 @@ export const CarritoPage = () => {
                   <div className="summary-total-row">
                     <div>
                       <span className="total-label">Total</span>
-                      <p className="tax-included font-label-sm">Impuestos incluidos</p>
+                      <p className="tax-included font-label-sm">IVA 12% incluido</p>
                     </div>
                     <span className="total-amount">${grandTotal.toFixed(2)}</span>
                   </div>

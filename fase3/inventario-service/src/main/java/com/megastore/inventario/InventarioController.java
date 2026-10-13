@@ -189,4 +189,29 @@ public class InventarioController {
 
         return ResponseEntity.notFound().build();
     }
+
+    private static volatile boolean inventarioDeshabilitado = false;
+
+    @GetMapping("/modo")
+    public ResponseEntity<?> getModo() {
+        return ResponseEntity.ok(Map.of(
+                "deshabilitado", inventarioDeshabilitado,
+                "estadoServicio", inventarioDeshabilitado ? "DESHABILITADO" : "HABILITADO"
+        ));
+    }
+
+    @PostMapping("/modo")
+    public ResponseEntity<?> setModo(@RequestBody(required = false) Map<String, Object> body) {
+        if (body != null) {
+            if (body.containsKey("deshabilitado")) {
+                inventarioDeshabilitado = Boolean.TRUE.equals(body.get("deshabilitado"));
+            } else if (body.containsKey("falloSimulado")) {
+                inventarioDeshabilitado = Boolean.TRUE.equals(body.get("falloSimulado"));
+            }
+        }
+        return ResponseEntity.ok(Map.of(
+                "deshabilitado", inventarioDeshabilitado,
+                "estadoServicio", inventarioDeshabilitado ? "DESHABILITADO" : "HABILITADO"
+        ));
+    }
 }

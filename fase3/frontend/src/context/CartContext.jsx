@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { sincronizarCarritoTemporal, limpiarCarritoTemporal } from '../services/api';
 
 const CartContext = createContext();
 
@@ -13,15 +14,34 @@ export const CartProvider = ({ children }) => {
 
   useEffect(() => {
     localStorage.setItem('sgologic_cart', JSON.stringify(cartItems));
+    try {
+      const savedUser = localStorage.getItem('sgologic_user');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        const cid = parsed?.id || parsed?.email;
+        if (cid) {
+          if (cartItems.length > 0) {
+            sincronizarCarritoTemporal(cid, cartItems);
+          } else {
+            limpiarCarritoTemporal(cid);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   }, [cartItems]);
 
   const addToCart = (product, quantity = 1) => {
+    const maxStock = typeof product.stock === 'number' && product.stock > 0 ? product.stock : 25;
     setCartItems(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
+        const limit = existing.maxStock || maxStock;
+        const nextQty = Math.min(limit, existing.cantidad + quantity);
         return prev.map(item =>
           item.id === product.id
-            ? { ...item, cantidad: item.cantidad + quantity }
+            ? { ...item, cantidad: nextQty, maxStock: limit }
             : item
         );
       }
@@ -32,7 +52,8 @@ export const CartProvider = ({ children }) => {
           nombre: product.nombre,
           descripcion: product.descripcion,
           precio: product.precio,
-          cantidad: quantity,
+          cantidad: Math.min(maxStock, quantity),
+          maxStock,
           imagen: product.imagen,
           stockStatus: product.tag || 'En stock'
         }
@@ -50,9 +71,11 @@ export const CartProvider = ({ children }) => {
       return;
     }
     setCartItems(prev =>
-      prev.map(item =>
-        item.id === productId ? { ...item, cantidad } : item
-      )
+      prev.map(item => {
+        if (item.id !== productId) return item;
+        const limit = item.maxStock || 25;
+        return { ...item, cantidad: Math.min(limit, cantidad) };
+      })
     );
   };
 
@@ -81,3 +104,4 @@ export const CartProvider = ({ children }) => {
 };
 
 export const useCart = () => useContext(CartContext);
+

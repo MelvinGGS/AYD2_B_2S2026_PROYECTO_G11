@@ -56,11 +56,15 @@ public class FacturacionService {
     }
 
     public String generarYTransmitirDteSat(String ordenId, BigDecimal total, String direccionDestino, String metodoPago, int plazoDias) {
-        boolean esBnpl = metodoPago != null && (
-                "credito_propio".equalsIgnoreCase(metodoPago.trim()) ||
-                "CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPago.trim()) ||
-                "BNPL".equalsIgnoreCase(metodoPago.trim()) ||
-                metodoPago.toLowerCase().contains("credito")
+        String mpLower = metodoPago != null ? metodoPago.trim().toLowerCase() : "";
+        boolean esBnpl = !mpLower.contains("payklik") && !mpLower.contains("tarjeta") && (
+                "credito_propio".equalsIgnoreCase(mpLower) ||
+                "credito_propio_30d".equalsIgnoreCase(mpLower) ||
+                "bnpl".equalsIgnoreCase(mpLower) ||
+                mpLower.contains("credito propio") ||
+                mpLower.contains("crédito propio") ||
+                mpLower.contains("30 dias") ||
+                mpLower.contains("30 días")
         );
         String metodoPagoNorm = esBnpl ? "CREDITO_PROPIO_30D" : "PAYKLIK";
         int plazoNorm = esBnpl ? (plazoDias > 0 ? plazoDias : 30) : 0;
@@ -70,6 +74,7 @@ public class FacturacionService {
         String autorizacion = "FEL-" + LocalDateTime.now().getYear() + "-" + (new Random().nextInt(90000) + 10000);
 
         BigDecimal montoIva = total.multiply(tasaIva != null ? tasaIva : new BigDecimal("0.12"));
+        String fechaVencimiento = LocalDateTime.now().plusDays(plazoNorm).toLocalDate().toString();
 
         String xmlDte = String.format(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
@@ -78,13 +83,16 @@ public class FacturacionService {
             "        <Emisor NITEmisor=\"%s\" NombreEmisor=\"%s\"/>\n" +
             "        <Receptor IDReceptor=\"CF\" CUIReceptor=\"29938132922\"/>\n" +
             "        <DatosGenerales Tipo=\"FACT\" FechaHoraEmision=\"%s\" CodigoMoneda=\"GTQ\"/>\n" +
+            "        <CondicionPago Modalidad=\"%s\" PlazoDias=\"%d\" TasaInteres=\"0.00%%\" FechaVencimiento=\"%s\"/>\n" +
             "        <Certificacion Serie=\"%s\" NumeroDocumento=\"%d\" NumeroAutorizacion=\"%s\"/>\n" +
             "        <Totales GranTotal=\"%.2f\" TotalImpuestos=\"%.2f\"/>\n" +
             "    </DatosEmision>\n" +
             "</DTE>",
             nitEmisor != null ? nitEmisor : "103849204",
             nombreEmisor != null ? nombreEmisor : "MegaStore Retail S.A.",
-            LocalDateTime.now().toString(), serie, numero, autorizacion,
+            LocalDateTime.now().toString(),
+            metodoPagoNorm, plazoNorm, fechaVencimiento,
+            serie, numero, autorizacion,
             total.doubleValue(), montoIva.doubleValue()
         );
 

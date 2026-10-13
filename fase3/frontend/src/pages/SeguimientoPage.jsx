@@ -1,20 +1,53 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Search, Truck, HelpCircle, Package, ArrowLeft, ShieldCheck, MapPin, Clock, X, FileText } from 'lucide-react';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { Search, Truck, HelpCircle, Package, ArrowLeft, ShieldCheck, MapPin, Clock, X, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { OrderTimeline } from '../components/OrderTimeline';
 import { Footer } from '../components/Footer';
-import { getOrden, getOrdenes, registrarIncidenciaCliente, cancelarOrdenCliente, abonarCreditoCliente, FACTURACION_API } from '../services/api';
+import {
+  getOrden,
+  getOrdenes,
+  registrarIncidenciaCliente,
+  cancelarOrdenCliente,
+  abonarCreditoCliente,
+  obtenerHistorialPagoOrden,
+  getEstadoCreditoCliente,
+  FACTURACION_API
+} from '../services/api';
+import { esMetodoCreditoPropio } from '../utils/checkoutUtils';
 import { useAuth } from '../context/AuthContext';
 
 export const SeguimientoPage = () => {
   const { ordenId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login?redirect=/seguimiento" replace />;
+  }
+
   const [orden, setOrden] = useState(null);
   const [ordersList, setOrdersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchId, setSearchId] = useState('');
+  const [pagoStatus, setPagoStatus] = useState({ online: true, intentos: [] });
+  const [ordenesLiquidadas, setOrdenesLiquidadas] = useState([]);
+
+  const refreshPaymentAndCredit = async (ordObj) => {
+    if (!ordObj?.id) return;
+    try {
+      const [hist, cred] = await Promise.all([
+        obtenerHistorialPagoOrden(ordObj.id),
+        getEstadoCreditoCliente(ordObj.clienteId || user?.id || '1')
+      ]);
+      setPagoStatus(hist);
+      if (cred && Array.isArray(cred.ordenesLiquidadas)) {
+        setOrdenesLiquidadas(cred.ordenesLiquidadas);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     const fetchOrderData = async () => {
@@ -46,6 +79,7 @@ export const SeguimientoPage = () => {
         if (targetId) {
           const data = await getOrden(targetId);
           setOrden(data);
+          await refreshPaymentAndCredit(data);
         } else {
           setOrden(null);
         }
@@ -92,7 +126,10 @@ export const SeguimientoPage = () => {
           setLiveNotification(data);
           // Refrescar orden instantáneamente sin esperar polling
           const fresh = await getOrden(orden.id);
-          if (fresh) setOrden(fresh);
+          if (fresh) {
+            setOrden(fresh);
+            await refreshPaymentAndCredit(fresh);
+          }
         } catch (err) {
           console.warn('Error parseando mensaje WebSocket:', err);
         }
@@ -109,7 +146,10 @@ export const SeguimientoPage = () => {
               const data = JSON.parse(e.data);
               setLiveNotification(data);
               const fresh = await getOrden(orden.id);
-              if (fresh) setOrden(fresh);
+              if (fresh) {
+                setOrden(fresh);
+                await refreshPaymentAndCredit(fresh);
+              }
             } catch (err) { }
           };
         }
@@ -118,17 +158,16 @@ export const SeguimientoPage = () => {
       console.warn('WebSockets no soportado o error:', e);
     }
 
-    // Polling de respaldo de muy baja frecuencia (solo si no hay conexión reactiva activa)
+    // Polling de respaldo y monitoreo de recuperación de contingencia
     const interval = setInterval(async () => {
-      if (!isLiveReactive) {
-        try {
-          const fresh = await getOrden(orden.id);
-          if (fresh && fresh.estado !== orden.estado) {
-            setOrden(fresh);
-          }
-        } catch (e) { }
-      }
-    }, 15000);
+      try {
+        const fresh = await getOrden(orden.id);
+        if (fresh) {
+          setOrden(fresh);
+          await refreshPaymentAndCredit(fresh);
+        }
+      } catch (e) { }
+    }, 4000);
 
     return () => {
       if (ws) ws.close();
@@ -317,6 +356,33 @@ export const SeguimientoPage = () => {
                 </div>
               )}
 
+              {(!pagoStatus.online || orden.estado === 'PAGO_EN_CONTINGENCIA' || (pagoStatus.intentos?.length > 0 && pagoStatus.intentos[pagoStatus.intentos.length - 1].resultado === 'ENCOLADO_CONTINGENCIA')) && (
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  fontSize: '0.84rem',
+                  color: '#fde68a',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.6rem'
+                }}>
+                  <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong style={{ color: '#fbbf24', display: 'block' }}>
+                      {!pagoStatus.online
+                        ? 'Microservicio de Pagos (:8083) Detenido — Evento Persistido en RabbitMQ (pagos.queue)'
+                        : 'Pasarela PayKlik en Contingencia — Cobro Resguardado en RabbitMQ DLQ (pagos.dlq)'}
+                    </strong>
+                    <span>
+                      Tu orden y stock están asegurados. El procesamiento financiero se completará automáticamente en cuanto el servicio de pagos se restablezca.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <OrderTimeline timeline={orden.timeline} />
             </div>
 
@@ -346,13 +412,24 @@ export const SeguimientoPage = () => {
                 <div className="detail-item">
                   <span className="detail-label">Método de pago</span>
                   <span className="detail-val">
-                    {(orden.metodoPago === 'credito_propio' || orden.metodoPago === 'CREDITO_PROPIO_30D' || (typeof orden.metodoPago === 'string' && (orden.metodoPago.toLowerCase().includes('credito propio') || orden.metodoPago.toLowerCase().includes('30 dias') || orden.metodoPago.toLowerCase().includes('bnpl'))))
+                    {esMetodoCreditoPropio(orden.metodoPago)
                       ? 'Crédito Propio (Paga en 30 días)'
                       : (orden.metodoPago || 'Transferencia bancaria')}
                   </span>
                 </div>
 
-                {(orden.metodoPago === 'credito_propio' || orden.metodoPago === 'CREDITO_PROPIO_30D' || (typeof orden.metodoPago === 'string' && (orden.metodoPago.toLowerCase().includes('credito propio') || orden.metodoPago.toLowerCase().includes('30 dias') || orden.metodoPago.toLowerCase().includes('bnpl')))) && (
+                <div className="detail-item">
+                  <span className="detail-label">Auditoría de Cobro (:8083)</span>
+                  <span className="detail-val" style={{ fontWeight: 600, color: !pagoStatus.online ? '#fbbf24' : '#34d399' }}>
+                    {!pagoStatus.online
+                      ? 'En Cola RabbitMQ (Contenedor Pagos Offline)'
+                      : (pagoStatus.intentos?.length > 0
+                        ? `${pagoStatus.intentos[pagoStatus.intentos.length - 1].resultado} (${pagoStatus.intentos[pagoStatus.intentos.length - 1].referenciaPayklik})`
+                        : (orden.estado !== 'CREADA' ? 'CONFIRMADO' : 'PENDIENTE EN COLA MQ'))}
+                  </span>
+                </div>
+
+                {esMetodoCreditoPropio(orden.metodoPago) && (
                   <div className="detail-item">
                     <span className="detail-label">Vencimiento del crédito</span>
                     <span className="detail-val font-bold" style={{ color: 'var(--orange-primary)' }}>
@@ -392,25 +469,39 @@ export const SeguimientoPage = () => {
                   <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>Facturación Electrónica SAT (FEL)</span>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Documento Tributario Electrónico emitido con firma digital</span>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {(orden.metodoPago === 'credito_propio' || orden.metodoPago === 'CREDITO_PROPIO_30D' || (typeof orden.metodoPago === 'string' && (orden.metodoPago.toLowerCase().includes('credito propio') || orden.metodoPago.toLowerCase().includes('30 dias') || orden.metodoPago.toLowerCase().includes('bnpl')))) && orden.estado !== 'CANCELADA' && (
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm"
-                      onClick={async () => {
-                        const res = await abonarCreditoCliente(orden.clienteId || user?.id || '1', orden.total || 0);
-                        setLiveNotification({
-                          titulo: 'Abono a Crédito Propio Registrado',
-                          mensaje: `${res?.mensaje || 'Pago aplicado exitosamente'} por Q${(Number(orden.total) || 0).toFixed(2)}. Tu cupo de crédito ha sido liberado.`
-                        });
-                      }}
-                      style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.35)' }}
-                      title="Liquidar saldo de esta orden financiada a 30 días"
-                    >
-                      <span>Liquidar Crédito 30d</span>
-                    </button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {esMetodoCreditoPropio(orden.metodoPago) && orden.estado !== 'CANCELADA' && (
+                    ordenesLiquidadas.includes(orden.id) ? (
+                      <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '0.35rem 0.7rem' }}>
+                        <CheckCircle2 size={14} /> Crédito 30d Liquidado
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        onClick={async () => {
+                          try {
+                            const res = await abonarCreditoCliente(orden.clienteId || user?.id || '1', orden.total || 0, orden.id);
+                            setOrdenesLiquidadas(prev => [...prev, orden.id]);
+                            setLiveNotification({
+                              titulo: 'Abono a Crédito Propio Registrado',
+                              mensaje: `${res?.mensaje || 'Pago aplicado exitosamente'} por Q${(Number(orden.total) || 0).toFixed(2)}. Tu cupo de crédito ha sido liberado.`
+                            });
+                          } catch (err) {
+                            setLiveNotification({
+                              titulo: 'Aviso de Crédito Propio',
+                              mensaje: err.message || 'Esta orden ya fue liquidada previamente.'
+                            });
+                          }
+                        }}
+                        style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                        title="Liquidar saldo de esta orden financiada a 30 días"
+                      >
+                        <span>Liquidar Crédito 30d</span>
+                      </button>
+                    )
                   )}
-                  {(orden.estado === 'CREADA' || orden.estado === 'EN_PREPARACION') && (
+                  {(orden.estado === 'CREADA' || orden.estado === 'EN_PREPARACION' || orden.estado === 'PAGO_EN_CONTINGENCIA') && (
                     <button
                       type="button"
                       className="btn-secondary btn-sm"

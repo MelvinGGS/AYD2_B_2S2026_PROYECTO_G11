@@ -15,8 +15,46 @@ import java.util.UUID;
 @CrossOrigin(origins = "*")
 public class MockPayKlikController {
 
+    private static volatile boolean falloSimulado = false;
+
+    @GetMapping("/modo")
+    public ResponseEntity<Map<String, Object>> consultarModo() {
+        return ResponseEntity.ok(Map.of(
+                "falloSimulado", falloSimulado,
+                "deshabilitado", falloSimulado,
+                "estadoPasarela", falloSimulado ? "CAIDA_SIMULADA" : "OPERATIVA",
+                "estadoServicio", falloSimulado ? "DESHABILITADO" : "HABILITADO"
+        ));
+    }
+
+    @PostMapping("/modo")
+    public ResponseEntity<Map<String, Object>> configurarModo(@RequestBody(required = false) Map<String, Object> body) {
+        if (body != null && body.containsKey("deshabilitado")) {
+            falloSimulado = Boolean.parseBoolean(body.get("deshabilitado").toString());
+        } else if (body != null && body.containsKey("falloSimulado")) {
+            falloSimulado = Boolean.parseBoolean(body.get("falloSimulado").toString());
+        } else {
+            falloSimulado = !falloSimulado;
+        }
+        System.out.println("[PAYKLIK GATEWAY] Estado de pasarela actualizado a deshabilitado=" + falloSimulado);
+        return ResponseEntity.ok(Map.of(
+                "falloSimulado", falloSimulado,
+                "deshabilitado", falloSimulado,
+                "estadoPasarela", falloSimulado ? "CAIDA_SIMULADA" : "OPERATIVA",
+                "estadoServicio", falloSimulado ? "DESHABILITADO" : "HABILITADO"
+        ));
+    }
+
     @PostMapping("/cobrar")
     public ResponseEntity<Map<String, Object>> procesarCobro(@RequestBody(required = false) Map<String, Object> solicitud) {
+        if (falloSimulado) {
+            System.err.println("[PAYKLIK GATEWAY] Rechazando peticion por simulacion de caida de pasarela (HTTP 503).");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                    "status", "ERROR_PASARELA",
+                    "error", "PayKlik Gateway no disponible temporalmente (Simulacion de Caida Activa)."
+            ));
+        }
+
         if (solicitud == null || solicitud.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of(
                     "status", "RECHAZADO",

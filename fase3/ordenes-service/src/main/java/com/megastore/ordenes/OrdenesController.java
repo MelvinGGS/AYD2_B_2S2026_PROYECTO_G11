@@ -18,9 +18,13 @@ public class OrdenesController {
     }
 
     @PostMapping
-    public ResponseEntity<Orden> crearOrden(@RequestBody CrearOrdenRequest request) {
-        Orden nueva = ordenesService.crearOrden(request);
-        return ResponseEntity.ok(nueva);
+    public ResponseEntity<?> crearOrden(@RequestBody CrearOrdenRequest request) {
+        try {
+            Orden nueva = ordenesService.crearOrden(request);
+            return ResponseEntity.ok(nueva);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/{id}")
@@ -35,21 +39,29 @@ public class OrdenesController {
     }
 
     @PatchMapping("/{id}/estado")
-    public ResponseEntity<Orden> actualizarEstado(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
-        String nuevoEstado = body.get("estado");
-        if (nuevoEstado != null) {
-            if ("CANCELADA".equalsIgnoreCase(nuevoEstado)) {
-                return ordenesService.cancelarOrden(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<?> actualizarEstado(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
+        try {
+            String nuevoEstado = body.get("estado");
+            if (nuevoEstado != null) {
+                if ("CANCELADA".equalsIgnoreCase(nuevoEstado)) {
+                    return ordenesService.cancelarOrden(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+                }
+                ordenesService.actualizarEstadoOrden(id, nuevoEstado);
             }
-            ordenesService.actualizarEstadoOrden(id, nuevoEstado);
+            return ordenesService.obtenerOrdenPorId(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
         }
-        return ordenesService.obtenerOrdenPorId(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping("/{id}/cancelar")
-    public ResponseEntity<Orden> cancelarOrden(@PathVariable String id) {
-        Optional<Orden> cancelada = ordenesService.cancelarOrden(id);
-        return cancelada.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<?> cancelarOrden(@PathVariable String id) {
+        try {
+            Optional<Orden> cancelada = ordenesService.cancelarOrden(id);
+            return cancelada.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/{id}/incidencias")

@@ -49,6 +49,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding bindingOrdenesInventarioInsuficiente(Queue ordenesStatusQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(ordenesStatusQueue).to(topicExchange).with("inventario.insuficiente");
+    }
+
+    @Bean
     public Jackson2JsonMessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();
     }

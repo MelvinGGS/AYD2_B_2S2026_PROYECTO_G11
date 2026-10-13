@@ -1,32 +1,54 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { CheckCircle2, Info, ArrowRight, Store, Calendar, ShieldCheck, Truck } from 'lucide-react';
-import { Navbar } from '../components/Navbar';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
+import { CheckCircle2, Info, ArrowRight, Store, Calendar, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Footer } from '../components/Footer';
-import { getOrden } from '../services/api';
+import { getOrden, obtenerHistorialPagoOrden } from '../services/api';
+import { esMetodoCreditoPropio } from '../utils/checkoutUtils';
+import { useAuth } from '../context/AuthContext';
 
 export const ConfirmacionPage = () => {
   const { ordenId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   const [orden, setOrden] = useState(null);
+  const [pagoStatus, setPagoStatus] = useState({ online: true, intentos: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchOrderData = async () => {
-      setLoading(true);
+    let isMounted = true;
+    const targetId = ordenId || localStorage.getItem('lastOrder');
+
+    const fetchOrderAndPayment = async (initial = false) => {
+      if (initial) setLoading(true);
       try {
-        const targetId = ordenId || localStorage.getItem('lastOrder');
         if (targetId) {
-          const data = await getOrden(targetId);
-          setOrden(data);
+          const [data, histPago] = await Promise.all([
+            getOrden(targetId),
+            obtenerHistorialPagoOrden(targetId)
+          ]);
+          if (isMounted) {
+            setOrden(data);
+            setPagoStatus(histPago);
+          }
         }
       } catch (err) {
         console.warn('Error al cargar orden en confirmacion:', err);
       } finally {
-        setLoading(false);
+        if (initial && isMounted) setLoading(false);
       }
     };
-    fetchOrderData();
+
+    fetchOrderAndPayment(true);
+    const interval = setInterval(() => fetchOrderAndPayment(false), 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [ordenId]);
 
   const getEstimatedDate = () => {
@@ -35,14 +57,15 @@ export const ConfirmacionPage = () => {
     return d.toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   };
 
-  const esCreditoPropio = orden?.metodoPago === 'credito_propio' ||
-    orden?.metodoPago === 'CREDITO_PROPIO_30D' ||
-    (typeof orden?.metodoPago === 'string' && (
-      orden?.metodoPago.toLowerCase().includes('credito propio') ||
-      orden?.metodoPago.toLowerCase().includes('30 dias') ||
-      orden?.metodoPago.toLowerCase().includes('30 días') ||
-      orden?.metodoPago.toLowerCase().includes('bnpl')
-    ));
+  const esCreditoPropio = esMetodoCreditoPropio(orden?.metodoPago);
+  const ultimoIntento = pagoStatus.intentos && pagoStatus.intentos.length > 0
+    ? pagoStatus.intentos[pagoStatus.intentos.length - 1]
+    : null;
+
+  const enContingenciaPagos =
+    !pagoStatus.online ||
+    orden?.estado === 'PAGO_EN_CONTINGENCIA' ||
+    ultimoIntento?.resultado === 'ENCOLADO_CONTINGENCIA';
 
   return (
     <div className="app-container">
@@ -79,16 +102,46 @@ export const ConfirmacionPage = () => {
               </p>
             </div>
 
-            {/* Circuit Breaker Status Banner */}
-            <div className="status-banner-card">
-              <Info className="banner-info-icon" size={24} />
-              <div>
-                <h4 className="banner-heading">Procesando transmisión omnicanal</h4>
-                <p className="banner-subtext">
-                  Tu orden ha sido registrada en SGO-Logic. Facturación electrónica emitida y despacho en curso.
-                </p>
+            {/* Circuit Breaker & RabbitMQ Contingency Status Banner */}
+            {enContingenciaPagos ? (
+              <div
+                className="status-banner-card"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.45)',
+                  color: '#fbbf24'
+                }}
+              >
+                <AlertTriangle size={26} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                <div>
+                  <h4 className="banner-heading" style={{ color: '#fbbf24' }}>
+                    {!pagoStatus.online
+                      ? 'Contingencia Activa: Microservicio de Pagos (:8083) Detenido — Transacción Persistida en RabbitMQ'
+                      : 'Circuit Breaker Abierto: Cobro Resguardado en Cola de Contingencia (RabbitMQ DLQ)'}
+                  </h4>
+                  <p className="banner-subtext" style={{ color: '#fde68a' }}>
+                    {!pagoStatus.online
+                      ? `El contenedor de pagos no responde en este instante, pero tu orden #${orden?.id} y tu reserva de inventario están 100% persistidas en la cola durable 'pagos.queue' de RabbitMQ. En cuanto el servicio se levante, el cobro y la facturación SAT continuarán automáticamente.`
+                      : `La pasarela externa reportó indisponibilidad temporal. Resilience4j activó el fallback y encoló tu pago en 'pagos.dlq' (Estado: ${orden?.estado || 'ENCOLADO_CONTINGENCIA'}) sin perder tu pedido.`}
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="status-banner-card">
+                <Info className="banner-info-icon" size={24} />
+                <div>
+                  <h4 className="banner-heading">
+                    Procesando transmisión omnicanal ({orden?.estado || 'EN_PREPARACION'})
+                  </h4>
+                  <p className="banner-subtext">
+                    Tu orden ha sido registrada en SGO-Logic.{' '}
+                    {ultimoIntento?.referenciaPayklik
+                      ? `Transacción autorizada (${ultimoIntento.referenciaPayklik}). Facturación electrónica SAT emitida y despacho en curso.`
+                      : 'Facturación electrónica emitida y despacho en curso.'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Glassmorphism Order Summary Breakdown */}
             <div className="order-summary-glass">
@@ -100,12 +153,24 @@ export const ConfirmacionPage = () => {
                   <span>${orden?.subtotal ? Number(orden.subtotal).toFixed(2) : '0.00'}</span>
                 </div>
                 <div className="summary-line">
+                  <span>Impuestos (12% IVA SAT)</span>
+                  <span>${orden?.impuestos ? Number(orden.impuestos).toFixed(2) : '0.00'}</span>
+                </div>
+                <div className="summary-line">
                   <span>Envío ({orden?.metodoEntrega || 'Envio a Domicilio'})</span>
                   <span>{orden?.envio === 0 ? 'Gratis' : `$${(Number(orden?.envio) || 0).toFixed(2)}`}</span>
                 </div>
                 <div className="summary-line">
                   <span>Método de pago</span>
                   <span>{esCreditoPropio ? 'Crédito Propio MegaStore (Paga en 30 días)' : (orden?.metodoPago || 'PayKlik')}</span>
+                </div>
+                <div className="summary-line">
+                  <span>Estado del cobro</span>
+                  <span style={{ fontWeight: 700, color: enContingenciaPagos ? '#fbbf24' : '#34d399' }}>
+                    {!pagoStatus.online
+                      ? 'EN COLA RABBITMQ (PAGOS OFFLINE)'
+                      : (ultimoIntento?.resultado || (orden?.estado !== 'CREADA' ? 'CONFIRMADO' : 'PROCESANDO EN MQ'))}
+                  </span>
                 </div>
 
                 {esCreditoPropio && (
@@ -168,3 +233,4 @@ export const ConfirmacionPage = () => {
     </div>
   );
 };
+

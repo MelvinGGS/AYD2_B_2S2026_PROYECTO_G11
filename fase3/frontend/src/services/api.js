@@ -17,6 +17,18 @@ export const FACTURACION_API = (typeof process !== 'undefined' && process.env?.R
   ? process.env.REACT_APP_FACTURACION_API
   : (import.meta.env?.VITE_FACTURACION_API || `http://${API_HOST}:8084/api/facturas`);
 
+export const PAGOS_API = (typeof process !== 'undefined' && process.env?.REACT_APP_PAGOS_API)
+  ? process.env.REACT_APP_PAGOS_API
+  : (import.meta.env?.VITE_PAGOS_API || `http://${API_HOST}:8083/api`);
+
+export const LOGISTICA_API = (typeof process !== 'undefined' && process.env?.REACT_APP_LOGISTICA_API)
+  ? process.env.REACT_APP_LOGISTICA_API
+  : (import.meta.env?.VITE_LOGISTICA_API || `http://${API_HOST}:8085/api/logistica`);
+
+export const NOTIFICACIONES_API = (typeof process !== 'undefined' && process.env?.REACT_APP_NOTIFICACIONES_API)
+  ? process.env.REACT_APP_NOTIFICACIONES_API
+  : (import.meta.env?.VITE_NOTIFICACIONES_API || `http://${API_HOST}:8086/api/notificaciones`);
+
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 800) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -613,25 +625,57 @@ export const updateEstadoOrden = async (ordenId, nuevoEstado) => {
   return normalizeOrder({ id: ordenId, estado: nuevoEstado, timeline: buildTimeline(nuevoEstado) });
 };
 
+const pingServiceHealth = async (nombre, url, checkFn = null, allow404 = false) => {
+  const start = Date.now();
+  try {
+    const res = await fetchWithTimeout(url, {}, 700);
+    const latencia = `${Math.max(1, Date.now() - start)}ms`;
+    if (res.ok || (allow404 && res.status === 404)) {
+      if (checkFn && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const custom = checkFn(data, latencia);
+        if (custom) return custom;
+      }
+      return { nombre, estado: 'Operativo', statusType: 'success', latencia };
+    }
+    return { nombre, estado: `HTTP ${res.status}`, statusType: 'error', latencia };
+  } catch (err) {
+    return { nombre, estado: 'En Contingencia (MQ)', statusType: 'error', latencia: 'Timeout' };
+  }
+};
+
 export const getDashboardMetrics = async () => {
   try {
-    const res = await fetch(`${ORDENES_API}/ordenes`);
-    if (res.ok) {
-      const rawOrders = await res.json();
+    const [resOrdenes, payklikHealth, satHealth, logiHealth, mqHealth, pagosContingencia] = await Promise.all([
+      fetchWithTimeout(`${ORDENES_API}/ordenes`, {}, 1000).catch(() => null),
+      pingServiceHealth('PayKlik API', `${PAGOS_API}/payklik/modo`, (data, latencia) => {
+        if (data && data.falloSimulado) {
+          return { nombre: 'PayKlik API', estado: 'Caída Simulada (DLQ Activo)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      pingServiceHealth('SAT Facturación XML', `${FACTURACION_API}/ORD-HEALTHCHECK`, null, true),
+      pingServiceHealth('LogiExpress API', `${INVENTARIO_API}/unificado`),
+      pingServiceHealth('RabbitMQ Bus Eventos', `${NOTIFICACIONES_API}/health`),
+      fetchWithTimeout(`${PAGOS_API}/pagos/contingencia`, {}, 700).then(r => r.ok ? r.json() : []).catch(() => [])
+    ]);
+
+    if (resOrdenes && resOrdenes.ok) {
+      const rawOrders = await resOrdenes.json();
       const realOrders = Array.isArray(rawOrders) ? rawOrders.map(normalizeOrder) : [];
       const totalVentas = realOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      const sistemas = [payklikHealth, satHealth, logiHealth, mqHealth];
+      const serviciosCaidos = sistemas.filter(s => s.statusType === 'error').length;
+      const ordenesEnContingencia = realOrders.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length;
+      const alertasActivas = serviciosCaidos + Math.max(ordenesEnContingencia, Array.isArray(pagosContingencia) ? pagosContingencia.length : 0);
+
       return {
         totalOrdenesHoy: realOrders.length,
-        ordenesIncremento: realOrders.length > 0 ? `+${realOrders.length} ordenes registradas` : '0 hoy',
-        ordenesPendientes: realOrders.filter(o => o.estado !== 'ENTREGADA').length,
-        alertasActivas: 0,
+        ordenesIncremento: realOrders.length > 0 ? `+${realOrders.length} órdenes registradas` : '0 hoy',
+        ordenesPendientes: realOrders.filter(o => o.estado !== 'ENTREGADA' && o.estado !== 'CANCELADA').length,
+        alertasActivas,
         ingresosHoy: 'Q' + totalVentas.toFixed(2),
-        sistemas: [
-          { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '15ms' },
-          { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '45ms' },
-          { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '20ms' },
-          { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
-        ],
+        sistemas,
         ultimasOrdenes: realOrders
       };
     }
@@ -646,13 +690,13 @@ export const getDashboardMetrics = async () => {
     totalOrdenesHoy: allOrders.length,
     ordenesIncremento: `+${allOrders.length} órdenes registradas`,
     ordenesPendientes: allOrders.filter(o => o.estado !== 'ENTREGADA').length,
-    alertasActivas: 0,
+    alertasActivas: 1,
     ingresosHoy: 'Q' + totalVentas.toFixed(2),
     sistemas: [
-      { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '15ms' },
-      { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '45ms' },
-      { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '20ms' },
-      { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
+      { nombre: 'PayKlik API', estado: 'Modo Respaldo', statusType: 'info', latencia: '15ms' },
+      { nombre: 'SAT Facturación XML', estado: 'Modo Respaldo', statusType: 'info', latencia: '45ms' },
+      { nombre: 'LogiExpress API', estado: 'Modo Respaldo', statusType: 'info', latencia: '20ms' },
+      { nombre: 'RabbitMQ Bus Eventos', estado: 'Modo Respaldo', statusType: 'info', latencia: '2ms' }
     ],
     ultimasOrdenes: allOrders
   };
@@ -662,18 +706,30 @@ function buildTimeline(estadoActual) {
   const e = estadoActual || 'CREADA';
   const isFinalizada = e === 'ENTREGADA';
   const isError = e === 'INVENTARIO_INSUFICIENTE' || e === 'CANCELADA';
+  const isContingencia = e === 'PAGO_EN_CONTINGENCIA';
 
   if (isError) {
     return [
       { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: false },
-      { estado: e, titulo: 'Cancelada', desc: 'Orden cancelada por falta de inventario o pago fallido.', fecha: 'Cancelado', completado: false, activo: true, statusType: 'error' }
+      { estado: e, titulo: e === 'INVENTARIO_INSUFICIENTE' ? 'Sin Stock' : 'Cancelada', desc: e === 'INVENTARIO_INSUFICIENTE' ? 'Orden detenida por falta de stock disponible.' : 'Orden cancelada y stock liberado en almacén.', fecha: 'Cancelado', completado: false, activo: true, statusType: 'error' }
+    ];
+  }
+
+  if (isContingencia) {
+    return [
+      { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado y stock reservado.', fecha: 'Confirmado', completado: true, activo: false },
+      { estado: 'PAGO_EN_CONTINGENCIA', titulo: 'Pago en Cola de Contingencia (DLQ)', desc: 'Pasarela externa sin respuesta. Cobro resguardado en RabbitMQ DLQ para reintento automático sin pérdida de orden.', fecha: 'En Cola MQ', completado: false, activo: true, statusType: 'warning' },
+      { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Pendiente de confirmación de cobro.', fecha: 'En espera', completado: false, activo: false },
+      { estado: 'EN_PREPARACION', titulo: 'En preparación', desc: 'Pendiente de liberación financiera.', fecha: 'En espera', completado: false, activo: false },
+      { estado: 'EN_TRANSITO', titulo: 'En tránsito', desc: 'Despacho con LogiExpress.', fecha: 'En espera', completado: false, activo: false },
+      { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'En espera', completado: false, activo: false }
     ];
   }
 
   return [
     { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: !isFinalizada && e === 'CREADA' },
-    { estado: 'PAGADA', titulo: 'Pagada', desc: 'Pago procesado por pasarela PayKlik.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: !isFinalizada && e === 'PAGADA' },
-    { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Comprobante fiscal XML emitido.', fecha: 'Facturado', completado: ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'FACTURADA' },
+    { estado: 'PAGADA', titulo: 'Pagada', desc: 'Transacción financiera autorizada.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: !isFinalizada && e === 'PAGADA' },
+    { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Comprobante fiscal XML emitido ante SAT.', fecha: 'Facturado', completado: ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'FACTURADA' },
     { estado: 'EN_PREPARACION', titulo: 'En preparación', desc: 'Empaquetado en centro logístico.', fecha: 'Empaquetando', completado: ['EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'EN_PREPARACION' },
     { estado: 'EN_TRANSITO', titulo: 'En tránsito', desc: 'Despachado con LogiExpress.', fecha: 'En camino', completado: ['EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'EN_TRANSITO' },
     { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'Finalizado', completado: e === 'ENTREGADA', activo: false }
@@ -718,34 +774,195 @@ export const cancelarOrdenCliente = async (ordenId) => {
       const data = await res.json();
       return normalizeOrder(data);
     }
+    const err = await res.json().catch(() => ({}));
+    if (err.error) throw new Error(err.error);
   } catch (e) {
+    if (e.message && e.message.includes('entregada')) {
+      throw e;
+    }
     console.warn('Backend offline al cancelar orden:', e);
   }
   return updateEstadoOrden(ordenId, 'CANCELADA');
 };
 
-export const abonarCreditoCliente = async (clienteId, monto) => {
+export const getEstadoCreditoCliente = async (clienteId) => {
   try {
-    const res = await fetch(`${ORDENES_API}/credito/abono`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clienteId: String(clienteId || '1'),
-        monto: Number(monto) || 0
-      })
-    });
+    const res = await fetchWithTimeout(`${ORDENES_API}/credito/estado/${encodeURIComponent(clienteId || '1')}`, {}, 800);
     if (res.ok) {
       return await res.json();
     }
   } catch (e) {
+    console.warn('No se pudo consultar estado crediticio en backend:', e.message);
+  }
+  return evaluarCredito(clienteId, 100);
+};
+
+export const abonarCreditoCliente = async (clienteId, monto, ordenId = null) => {
+  try {
+    const payload = {
+      clienteId: String(clienteId || '1'),
+      monto: Number(monto) || 0
+    };
+    if (ordenId) payload.ordenId = ordenId;
+
+    const res = await fetch(`${ORDENES_API}/credito/abono`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    const err = await res.json().catch(() => ({}));
+    if (err.error) throw new Error(err.error);
+  } catch (e) {
+    if (e.message && (e.message.includes('liquidada') || e.message.includes('mayor a cero'))) {
+      throw e;
+    }
     console.warn('Backend offline al registrar abono de credito:', e);
   }
   return {
     clienteId: String(clienteId || '1'),
     montoAbonado: Number(monto) || 0,
+    ordenLiquidada: ordenId,
     mensaje: 'Abono a credito propio aplicado exitosamente',
     fecha: new Date().toISOString()
   };
 };
 
+export const obtenerHistorialPagoOrden = async (ordenId) => {
+  if (!ordenId) return { online: true, intentos: [] };
+  try {
+    const res = await fetchWithTimeout(`${PAGOS_API}/pagos/orden/${encodeURIComponent(ordenId)}`, {}, 800);
+    if (res.ok) {
+      const data = await res.json();
+      return { online: true, intentos: Array.isArray(data) ? data : [] };
+    }
+    if (res.status === 404) {
+      return { online: true, intentos: [] };
+    }
+    return { online: false, intentos: [], error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { online: false, intentos: [], error: 'Microservicio de Pagos (:8083) fuera de línea — Eventos encolados en RabbitMQ' };
+  }
+};
 
+export const getModoPayKlik = async () => {
+  try {
+    const res = await fetchWithTimeout(`${PAGOS_API}/payklik/modo`, {}, 800);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        deshabilitado: Boolean(data.deshabilitado || data.falloSimulado),
+        estadoPasarela: data.estadoPasarela || (data.deshabilitado ? 'DESHABILITADO' : 'OPERATIVA'),
+        estadoServicio: data.estadoServicio || (data.deshabilitado ? 'DESHABILITADO' : 'HABILITADO')
+      };
+    }
+  } catch (e) {
+    return { deshabilitado: true, estadoPasarela: 'CONTENEDOR_DETENIDO', estadoServicio: 'DESHABILITADO', offline: true };
+  }
+  return { deshabilitado: false, estadoPasarela: 'OPERATIVA', estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoPayKlik = async (deshabilitado) => {
+  const res = await fetch(`${PAGOS_API}/payklik/modo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deshabilitado, falloSimulado: deshabilitado })
+  });
+  if (!res.ok) throw new Error('No se pudo cambiar el estado de la pasarela PayKlik');
+  return await res.json();
+};
+
+export const getModoSat = async () => {
+  try {
+    const res = await fetchWithTimeout(`${FACTURACION_API}/sat/modo`, {}, 800);
+    if (res.ok) return await res.json();
+  } catch (e) {
+    return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+  }
+  return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoSat = async (deshabilitado) => {
+  const res = await fetch(`${FACTURACION_API}/sat/modo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deshabilitado })
+  });
+  if (!res.ok) throw new Error('No se pudo cambiar el estado del servicio SAT');
+  return await res.json();
+};
+
+export const getModoInventario = async () => {
+  try {
+    const res = await fetchWithTimeout(`${INVENTARIO_API}/modo`, {}, 800);
+    if (res.ok) return await res.json();
+  } catch (e) {
+    return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+  }
+  return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoInventario = async (deshabilitado) => {
+  const res = await fetch(`${INVENTARIO_API}/modo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deshabilitado })
+  });
+  if (!res.ok) throw new Error('No se pudo cambiar el estado de reserva de inventario');
+  return await res.json();
+};
+
+export const getPagosContingencia = async () => {
+  try {
+    const res = await fetchWithTimeout(`${PAGOS_API}/pagos/contingencia`, {}, 800);
+    if (res.ok) return await res.json();
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
+export const reprocesarPagosContingencia = async () => {
+  const res = await fetch(`${PAGOS_API}/pagos/reprocesar-dlq`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) throw new Error('Error al reprocesar cola de contingencia DLQ');
+  return await res.json();
+};
+
+export const ajustarStockInventario = async (productoId, ubicacion, cantidad) => {
+  const res = await fetch(`${INVENTARIO_API}/stock/ajuste`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productoId, ubicacion, cantidad })
+  });
+  if (!res.ok) throw new Error('Error al ajustar stock en inventario');
+  return await res.json();
+};
+
+export const sincronizarCarritoTemporal = async (clienteId, items) => {
+  if (!clienteId) return;
+  try {
+    await fetchWithTimeout(`${ORDENES_API}/carrito/${encodeURIComponent(clienteId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, actualizado: new Date().toISOString() })
+    }, 600);
+  } catch (e) {
+    // Silencioso si Redis/backend no responde
+  }
+};
+
+export const limpiarCarritoTemporal = async (clienteId) => {
+  if (!clienteId) return;
+  try {
+    await fetchWithTimeout(`${ORDENES_API}/carrito/${encodeURIComponent(clienteId)}`, {
+      method: 'DELETE'
+    }, 600);
+  } catch (e) {
+    // Silencioso
+  }
+};

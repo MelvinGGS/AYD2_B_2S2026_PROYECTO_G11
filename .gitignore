@@ -22,6 +22,8 @@ Thumbs.db
 
 # Private personal files
 extras/
+ejemplos/
+*.zip
 
 # Cypress outputs
 cypress/videos/

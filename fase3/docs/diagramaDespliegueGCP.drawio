@@ -1,0 +1,63 @@
+<mxGraphModel adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="c1" value="Google Cloud Platform (GCP) - Region: us-central1 (Iowa)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#0284C7;strokeWidth=2;fontStyle=1;fontSize=14;fontColor=#0F172A;" vertex="1" parent="1">
+      <mxGeometry x="40" y="40" width="1120" height="740" as="geometry"/>
+    </mxCell>
+    <mxCell id="c2" value="VPC Network: megastore-vpc (10.0.0.0/16)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#38BDF8;strokeWidth=1;fontSize=12;fontColor=#0369A1;" vertex="1" parent="c1">
+      <mxGeometry x="30" y="50" width="1060" height="660" as="geometry"/>
+    </mxCell>
+    <mxCell id="fw1" value="GCP Cloud Firewall Rules&#xa;Permite: 80 (HTTP), 443 (HTTPS), 22 (SSH Deploy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#EF4444;strokeWidth=1;fontSize=11;fontColor=#991B1B;" vertex="1" parent="c2">
+      <mxGeometry x="30" y="40" width="300" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="gh1" value="GitHub Actions CI/CD Runner&#xa;SSH Deploy via Service Account" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#64748B;strokeWidth=1;fontSize=11;fontColor=#334155;" vertex="1" parent="c2">
+      <mxGeometry x="720" y="40" width="310" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="vm1" value="Compute Engine: e2-standard-4 (4 vCPU, 16 GB RAM, Ubuntu 22.04 LTS)&#xa;Persistent Disk SSD: 100 GB" style="swimlane;whiteSpace=wrap;html=1;fillColor=#F0F9FF;strokeColor=#0284C7;strokeWidth=2;fontStyle=1;fontSize=12;fontColor=#075985;" vertex="1" parent="c2">
+      <mxGeometry x="30" y="130" width="1000" height="500" as="geometry"/>
+    </mxCell>
+    <mxCell id="revproxy" value="Nginx Reverse Proxy &amp; SSL Termination (Puertos 80, 443)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0284C7;strokeColor=#0369A1;fontColor=#FFFFFF;fontStyle=1;fontSize=12;" vertex="1" parent="vm1">
+      <mxGeometry x="30" y="40" width="940" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="fe1" value="Frontend SPA React (Vite / Nginx)&#xa;Dashboard, Catalogo, Checkout BNPL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontSize=11;fontStyle=1;fontColor=#0369A1;" vertex="1" parent="vm1">
+      <mxGeometry x="30" y="120" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="ms_ord" value="ordenes-service (Spring Boot 17)&#xa;Puerto: 8081 | Scoring BNPL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;fontColor=#166534;" vertex="1" parent="vm1">
+      <mxGeometry x="270" y="120" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="ms_inv" value="inventario-service (Spring Boot 17)&#xa;Puerto: 8082 | Bloqueo Optimista" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;fontColor=#166534;" vertex="1" parent="vm1">
+      <mxGeometry x="510" y="120" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="ms_pag" value="pagos-service (Spring Boot 17)&#xa;Puerto: 8083 | PayKlik / BNPL 30d" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;fontColor=#166534;" vertex="1" parent="vm1">
+      <mxGeometry x="750" y="120" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="ms_fac" value="facturacion-service (Spring Boot 17)&#xa;Puerto: 8084 | FEL SAT / ACL AS/400" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;fontColor=#166534;" vertex="1" parent="vm1">
+      <mxGeometry x="30" y="210" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="ms_log" value="logistica-service (.NET 8 Web API)&#xa;Puerto: 8085 | LogiExpress Guías" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;fontColor=#5B21B6;" vertex="1" parent="vm1">
+      <mxGeometry x="270" y="210" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="ms_not" value="notificaciones-service (.NET 8)&#xa;Puerto: 8086 | Server-Sent Events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;fontColor=#5B21B6;" vertex="1" parent="vm1">
+      <mxGeometry x="510" y="210" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="infra_net" value="Docker Bridge Network: megastore-net (Subnet interna aislada)" style="swimlane;whiteSpace=wrap;html=1;fillColor=#FFFBEB;strokeColor=#F59E0B;strokeWidth=1;fontSize=11;fontColor=#B45309;" vertex="1" parent="vm1">
+      <mxGeometry x="30" y="300" width="940" height="170" as="geometry"/>
+    </mxCell>
+    <mxCell id="infra_rmq" value="RabbitMQ 3.13-Management&#xa;AMQP 5672 | UI 15672&#xa;Exchanges, DLQ, Topic Routers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=11;fontColor=#9A3412;" vertex="1" parent="infra_net">
+      <mxGeometry x="20" y="40" width="280" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="infra_pg" value="PostgreSQL 15 Cluster&#xa;Puerto: 5432&#xa;Bases: ordenes_db, inventario_db, pagos_db" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontSize=11;fontColor=#1E40AF;" vertex="1" parent="infra_net">
+      <mxGeometry x="330" y="40" width="280" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="infra_redis" value="Redis 7.2 In-Memory Cache&#xa;Puerto: 6379&#xa;Sesiones de usuario e idempotencia" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#DC2626;fontSize=11;fontColor=#991B1B;" vertex="1" parent="infra_net">
+      <mxGeometry x="640" y="40" width="280" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fw_rev" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284C7;strokeWidth=2;" edge="1" parent="c2" source="fw1" target="revproxy">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_gh_vm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748B;strokeWidth=1;dashed=1;" edge="1" parent="c2" source="gh1" target="vm1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

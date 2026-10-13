@@ -109,3 +109,23 @@ export function validarFormularioCheckout(datosEnvio, metodoPago, datosTarjeta =
 
   return { valido: true };
 }
+
+/**
+ * 6. Identifica de forma centralizada si una cadena de método de pago corresponde a Crédito Propio (BNPL 30 días)
+ * @param {string} metodoPago
+ * @returns {boolean}
+ */
+export function esMetodoCreditoPropio(metodoPago) {
+  if (!metodoPago || typeof metodoPago !== 'string') return false;
+  const norm = metodoPago.toLowerCase();
+  if (norm.includes('payklik') || norm.includes('tarjeta')) return false;
+  return (
+    norm.includes('credito_propio') ||
+    norm.includes('credito propio') ||
+    norm.includes('crédito propio') ||
+    norm.includes('30 dias') ||
+    norm.includes('30 días') ||
+    norm.includes('bnpl')
+  );
+}
+

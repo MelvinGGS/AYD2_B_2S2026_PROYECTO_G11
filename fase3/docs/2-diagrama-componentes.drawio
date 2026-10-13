@@ -1,0 +1,144 @@
+<mxfile host="app.diagrams.net" modified="2026-10-13T12:00:00.000Z" agent="Antigravity" version="24.7.0">
+  <diagram name="2. Diagrama de Componentes - SGO-Logic Fase 3" id="diag_componentes">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- MICROSERVICIO 1: ORDENES & SCORING -->
+        <mxCell id="c_ord" value="&lt;b&gt;«microservicio» ordenes-service&lt;/b&gt;&lt;br&gt;(Java 17 / Spring Boot :8081)" style="shape=folder;whiteSpace=wrap;html=1;tabWidth=160;tabHeight=25;tabPosition=left;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="320" height="490" as="geometry"/>
+        </mxCell>
+        <mxCell id="oc_ctrl" value="&lt;b&gt;OrdenesController&lt;/b&gt;&lt;br&gt;/api/carrito, /api/ordenes" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="280" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="oc_cred_ctrl" value="&lt;b&gt;CreditoController (Fase 3)&lt;/b&gt;&lt;br&gt;/api/credito/evaluar, /estado, /abono" style="html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="130" width="280" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="oc_cred_svc" value="&lt;b&gt;CreditoService (Scoring Engine)&lt;/b&gt;&lt;br&gt;Analiza mora en ERP, histórico compras &amp;amp; límite" style="html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="185" width="280" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="oc_svc" value="&lt;b&gt;OrdenesService&lt;/b&gt;&lt;br&gt;Reglas de negocio, validación server-side BNPL" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="245" width="280" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="oc_redis" value="&lt;b&gt;RedisTemplate&lt;/b&gt;&lt;br&gt;Serializa ítems en Redis (TTL sesiones)" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="305" width="280" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="oc_mq" value="&lt;b&gt;RabbitMQSender&lt;/b&gt;&lt;br&gt;Publica orden.creada al exchange topic" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="355" width="280" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- MICROSERVICIO 2: INVENTARIO -->
+        <mxCell id="c_inv" value="&lt;b&gt;«microservicio» inventario-service&lt;/b&gt;&lt;br&gt;(Java 17 / Spring Boot :8082)" style="shape=folder;whiteSpace=wrap;html=1;tabWidth=160;tabHeight=25;tabPosition=left;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="320" height="490" as="geometry"/>
+        </mxCell>
+        <mxCell id="ic_ctrl" value="&lt;b&gt;InventarioController&lt;/b&gt;&lt;br&gt;/api/inventario/unificado, /productos, /modo" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="80" width="280" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="ic_listener" value="&lt;b&gt;OrdenCreadaListener&lt;/b&gt;&lt;br&gt;Consume inventario.orden.queue" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="135" width="280" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="ic_svc" value="&lt;b&gt;InventarioService&lt;/b&gt;&lt;br&gt;Bloqueo optimista @Version, reserva 15 min" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="185" width="280" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ic_sched" value="&lt;b&gt;CleanupScheduler&lt;/b&gt;&lt;br&gt;@Scheduled(60s) revierte reservas expiradas" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="245" width="280" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="ic_mq" value="&lt;b&gt;RabbitMQSender&lt;/b&gt;&lt;br&gt;Publica inventario.reservado / insuficiente" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="300" width="280" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- MICROSERVICIO 3: PAGOS & RESILIENCIA -->
+        <mxCell id="c_pag" value="&lt;b&gt;«microservicio» pagos-service&lt;/b&gt;&lt;br&gt;(Java 17 / Spring Boot :8083)" style="shape=folder;whiteSpace=wrap;html=1;tabWidth=160;tabHeight=25;tabPosition=left;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="40" width="340" height="490" as="geometry"/>
+        </mxCell>
+        <mxCell id="pc_ctrl" value="&lt;b&gt;PagosController &amp;amp; MockPayKlikController&lt;/b&gt;&lt;br&gt;/api/payklik/modo, /contingencia, /reprocesar-dlq" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="780" y="80" width="300" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="pc_listener" value="&lt;b&gt;InventarioReservadoListener&lt;/b&gt;&lt;br&gt;Consume pagos.orden.queue" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="780" y="135" width="300" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="pc_svc" value="&lt;b&gt;PagosService (Bifurcación BNPL / Tarjeta)&lt;/b&gt;&lt;br&gt;BNPL 30d -&gt; Confirma directo sin pasarela" style="html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="780" y="185" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pc_cb" value="&lt;b&gt;CircuitBreaker Aspect (Resilience4j)&lt;/b&gt;&lt;br&gt;PayKlikClient: Ventana 10 req, 50% fallos / 5s timeout" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="780" y="245" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pc_fallback" value="&lt;b&gt;encolarPagoFallback &amp;amp; DLQ Reprocessor&lt;/b&gt;&lt;br&gt;Guarda ENCOLADO_CONTINGENCIA -&gt; pagos.dlq" style="html=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="780" y="305" width="300" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- MICROSERVICIO 4: FACTURACIÓN FEL & AS/400 -->
+        <mxCell id="c_fac" value="&lt;b&gt;«microservicio» facturacion-service&lt;/b&gt;&lt;br&gt;(Java 17 / Spring Boot :8084)" style="shape=folder;whiteSpace=wrap;html=1;tabWidth=170;tabHeight=25;tabPosition=left;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="40" width="340" height="490" as="geometry"/>
+        </mxCell>
+        <mxCell id="fc_listener" value="&lt;b&gt;PagoConfirmadoListener&lt;/b&gt;&lt;br&gt;Consume facturacion.pago.queue (pago.confirmado)" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="80" width="300" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="fc_svc" value="&lt;b&gt;FacturacionService&lt;/b&gt;&lt;br&gt;XML DTE SAT FEL con nodo &amp;lt;CondicionPago 30d&amp;gt;" style="html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="135" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="fc_acl" value="&lt;b&gt;LegacyErpAdapter (ACL AS/400)&lt;/b&gt;&lt;br&gt;Capa Anticorrupción: Cuentas por cobrar BNPL" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="195" width="300" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="fc_as400" value="&lt;b&gt;AS400BatchJob (@Scheduled)&lt;/b&gt;&lt;br&gt;Genera resumen_erp_*.csv para CPYFRMIMPF" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="255" width="300" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="fc_mq" value="&lt;b&gt;RabbitMQSender&lt;/b&gt;&lt;br&gt;Publica despacho.solicitado" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="310" width="300" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- MICROSERVICIO 5: LOGÍSTICA -->
+        <mxCell id="c_log" value="&lt;b&gt;«microservicio» logistica-service&lt;/b&gt;&lt;br&gt;(C# .NET 8 :8085)" style="shape=folder;whiteSpace=wrap;html=1;tabWidth=160;tabHeight=25;tabPosition=left;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1520" y="40" width="310" height="490" as="geometry"/>
+        </mxCell>
+        <mxCell id="lc_consumer" value="&lt;b&gt;DespachoSolicitadoConsumer&lt;/b&gt;&lt;br&gt;Consume logistica.despacho.queue" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="80" width="270" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="lc_origen" value="&lt;b&gt;DeterminarOrigenOptimo&lt;/b&gt;&lt;br&gt;Ruteo inteligente CD_SUR / CD_NORTE / Tienda" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="135" width="270" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="lc_lx" value="&lt;b&gt;MockLogiExpressService&lt;/b&gt;&lt;br&gt;Genera guía courier LEX-GT" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="195" width="270" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="lc_svc" value="&lt;b&gt;LogisticaService&lt;/b&gt;&lt;br&gt;Máquina de estados: CREADA-&gt;TRANSITO-&gt;ENTREGADA" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="250" width="270" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- MICROSERVICIO 6: NOTIFICACIONES -->
+        <mxCell id="c_not" value="&lt;b&gt;«microservicio» notificaciones-service&lt;/b&gt;&lt;br&gt;(C# .NET 8 Worker :8086)" style="shape=folder;whiteSpace=wrap;html=1;tabWidth=170;tabHeight=25;tabPosition=left;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=left;spacingLeft=10;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1870" y="40" width="300" height="490" as="geometry"/>
+        </mxCell>
+        <mxCell id="nc_worker" value="&lt;b&gt;RabbitMQConsumerService&lt;/b&gt;&lt;br&gt;BackgroundService consume topic (#)" style="html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1890" y="80" width="260" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="nc_broadcaster" value="&lt;b&gt;NotificationBroadcaster&lt;/b&gt;&lt;br&gt;Server-Sent Events (SSE) &amp;amp; WebSockets" style="html=1;whiteSpace=wrap;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1890" y="140" width="260" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="nc_ctrl" value="&lt;b&gt;NotificacionesController&lt;/b&gt;&lt;br&gt;/api/notificaciones/stream (SSE Push)" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1890" y="200" width="260" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="nc_tabla" value="&lt;b&gt;Auditoría y Bitácora&lt;/b&gt;&lt;br&gt;eventos_auditoria en PostgreSQL" style="html=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1890" y="255" width="260" height="45" as="geometry"/>
+        </mxCell>
+
+        <!-- Conectores inter-servicios -->
+        <mxCell id="e_mq_ord_inv" value="orden.creada" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="oc_mq" target="ic_listener">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_mq_inv_pag" value="inventario.reservado" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="ic_mq" target="pc_listener">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_mq_pag_fac" value="pago.confirmado" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="pc_svc" target="fc_listener">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_mq_fac_log" value="despacho.solicitado" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;strokeWidth=2;fontSize=10;" edge="1" parent="1" source="fc_mq" target="lc_consumer">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_mq_not" value="copia eventos (#)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#999999;dashed=1;fontSize=10;" edge="1" parent="1" source="fc_mq" target="nc_worker">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -120,7 +120,54 @@ public class PagosService {
         rabbitTemplate.convertAndSend(dlqQueue, pagoEncolado);
         System.out.println("[DLQ CONTINGENCIA] Cobro encolado en " + dlqQueue + " para reintento.");
 
+        try {
+            Map<String, Object> eventoContingencia = new HashMap<>();
+            eventoContingencia.put("ordenId", ordenId);
+            eventoContingencia.put("monto", monto);
+            eventoContingencia.put("estado", "PAGO_EN_CONTINGENCIA");
+            eventoContingencia.put("motivo", throwable.getMessage());
+            eventoContingencia.put("fecha", LocalDateTime.now().toString());
+            rabbitTemplate.convertAndSend(exchangeName, "pago.contingencia", eventoContingencia);
+        } catch (Exception e) {
+            System.err.println("[WARN] No se pudo emitir evento pago.contingencia: " + e.getMessage());
+        }
+
         return guardado;
+    }
+
+    public Map<String, Object> reprocesarPagosEnContingencia() {
+        java.util.List<IntentoPago> todos = intentoPagoRepository.findAll();
+        int reprocesados = 0;
+        java.util.List<String> ordenesRecuperadas = new java.util.ArrayList<>();
+
+        for (IntentoPago intento : todos) {
+            if ("ENCOLADO_CONTINGENCIA".equalsIgnoreCase(intento.getResultado())) {
+                String refRecuperada = "PK-REC-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+                intento.setResultado("APROBADO");
+                intento.setReferenciaPayklik(refRecuperada);
+                intento.setFecha(LocalDateTime.now());
+                intentoPagoRepository.save(intento);
+
+                publicarEventoConfirmado(
+                        intento.getOrdenId(),
+                        intento.getMonto(),
+                        intento.getCanal(),
+                        intento.getMetodoPago() != null ? intento.getMetodoPago() : MetodoPago.TARJETA_PAYKLIK,
+                        0,
+                        "PAGADO",
+                        refRecuperada,
+                        "Ciudad de Guatemala"
+                );
+                reprocesados++;
+                ordenesRecuperadas.add(intento.getOrdenId());
+            }
+        }
+
+        Map<String, Object> resumen = new HashMap<>();
+        resumen.put("reprocesados", reprocesados);
+        resumen.put("ordenesRecuperadas", ordenesRecuperadas);
+        resumen.put("fecha", LocalDateTime.now().toString());
+        return resumen;
     }
 
     // -------------------------------------------------------------------------

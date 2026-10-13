@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Check, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 export const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [added, setAdded] = useState(false);
 
   const handleAdd = () => {
+    if (!user) {
+      navigate('/login?redirect=/catalogo');
+      return;
+    }
     addToCart(product);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);

@@ -131,4 +131,20 @@ describe('E2E Spec 05 - Ops Admin Dashboard, Filtros de Pago y Transiciones Logi
     cy.contains('SKU-EPR-001').should('exist');
   });
 
+  it('Flujo 5: Gestion de disponibilidad y resiliencia de microservicios (Deshabilitar / Habilitar)', () => {
+    cy.visit('/admin/dashboard');
+
+    // Cambiar a la pestaña de Parametros y Resiliencia
+    cy.contains('button', 'Configuración').click();
+    cy.contains('Panel de Control de Disponibilidad y Resiliencia').should('exist');
+    cy.contains('Pasarela de Pagos PayKlik').should('exist');
+    cy.contains('Certificador SAT FEL & AS/400').should('exist');
+    cy.contains('Servicio Central de Inventario').should('exist');
+
+    // Probar boton de deshabilitar / habilitar
+    cy.contains('button', 'Pasarela PayKlik').should('exist');
+    cy.contains('button', 'Facturacion SAT').should('exist');
+    cy.contains('button', 'Reserva Stock').should('exist');
+  });
+
 });

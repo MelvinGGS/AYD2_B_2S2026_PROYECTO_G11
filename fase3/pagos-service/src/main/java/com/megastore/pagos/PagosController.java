@@ -9,6 +9,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/pagos")
+@CrossOrigin(origins = "*")
 public class PagosController {
 
     private final IntentoPagoRepository intentoPagoRepository;
@@ -30,6 +31,19 @@ public class PagosController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(historial);
+    }
+
+    @GetMapping("/contingencia")
+    public ResponseEntity<List<IntentoPago>> listarPagosEnContingencia() {
+        List<IntentoPago> encolados = intentoPagoRepository.findAll().stream()
+                .filter(p -> "ENCOLADO_CONTINGENCIA".equalsIgnoreCase(p.getResultado()))
+                .toList();
+        return ResponseEntity.ok(encolados);
+    }
+
+    @PostMapping("/reprocesar-dlq")
+    public ResponseEntity<Map<String, Object>> reprocesarDlq() {
+        return ResponseEntity.ok(pagosService.reprocesarPagosEnContingencia());
     }
 
     /**
