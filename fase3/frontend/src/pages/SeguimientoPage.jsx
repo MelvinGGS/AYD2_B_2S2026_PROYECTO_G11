@@ -4,7 +4,7 @@ import { Search, Truck, HelpCircle, Package, ArrowLeft, ShieldCheck, MapPin, Clo
 import { Navbar } from '../components/Navbar';
 import { OrderTimeline } from '../components/OrderTimeline';
 import { Footer } from '../components/Footer';
-import { getOrden, getOrdenes, registrarIncidenciaCliente } from '../services/api';
+import { getOrden, getOrdenes, registrarIncidenciaCliente, cancelarOrdenCliente, abonarCreditoCliente, FACTURACION_API } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export const SeguimientoPage = () => {
@@ -386,23 +386,60 @@ export const SeguimientoPage = () => {
                 </div>
               </div>
 
-              {/* SAT DTE Fiscal Invoice Section */}
+              {/* SAT DTE Fiscal Invoice & Acciones de Orden (BNPL / Cancelacion) */}
               <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
                   <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>Facturación Electrónica SAT (FEL)</span>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Documento Tributario Electrónico emitido con firma digital</span>
                 </div>
-                <a
-                  href={`http://localhost:8084/api/facturas/orden/${orden.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-secondary btn-sm"
-                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--orange-primary)' }}
-                  title="Descargar comprobante tributario oficial SAT FEL en formato XML"
-                >
-                  <FileText size={15} />
-                  <span>Descargar Factura XML</span>
-                </a>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(orden.metodoPago === 'credito_propio' || orden.metodoPago === 'CREDITO_PROPIO_30D' || (typeof orden.metodoPago === 'string' && (orden.metodoPago.toLowerCase().includes('credito propio') || orden.metodoPago.toLowerCase().includes('30 dias') || orden.metodoPago.toLowerCase().includes('bnpl')))) && orden.estado !== 'CANCELADA' && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={async () => {
+                        const res = await abonarCreditoCliente(orden.clienteId || user?.id || '1', orden.total || 0);
+                        setLiveNotification({
+                          titulo: 'Abono a Crédito Propio Registrado',
+                          mensaje: `${res?.mensaje || 'Pago aplicado exitosamente'} por Q${(Number(orden.total) || 0).toFixed(2)}. Tu cupo de crédito ha sido liberado.`
+                        });
+                      }}
+                      style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                      title="Liquidar saldo de esta orden financiada a 30 días"
+                    >
+                      <span>Liquidar Crédito 30d</span>
+                    </button>
+                  )}
+                  {(orden.estado === 'CREADA' || orden.estado === 'EN_PREPARACION') && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={async () => {
+                        const actualizada = await cancelarOrdenCliente(orden.id);
+                        if (actualizada) setOrden(actualizada);
+                        setLiveNotification({
+                          titulo: 'Orden Cancelada',
+                          mensaje: `La orden ${orden.id} ha sido cancelada y el stock reservado fue liberado.`
+                        });
+                      }}
+                      style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.35)' }}
+                      title="Cancelar pedido y liberar reserva de inventario"
+                    >
+                      <span>Cancelar Orden</span>
+                    </button>
+                  )}
+                  <a
+                    href={`${FACTURACION_API}/orden/${orden.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-secondary btn-sm"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--orange-primary)' }}
+                    title="Descargar comprobante tributario oficial SAT FEL en formato XML"
+                  >
+                    <FileText size={15} />
+                    <span>Descargar Factura XML</span>
+                  </a>
+                </div>
               </div>
             </div>
           </div>

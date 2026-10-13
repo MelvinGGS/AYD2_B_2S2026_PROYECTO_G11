@@ -101,6 +101,8 @@ jobs:
         run: |
           echo "Ejecutando pruebas de resiliencia y pagos..."
           mvn -B test -f fase3/pagos-service/pom.xml
+          echo "Ejecutando pruebas unitarias de inventario y bloqueo optimista..."
+          mvn -B test -f fase3/inventario-service/pom.xml
 
       - name: Configurar .NET SDK 8.0
         uses: actions/setup-dotnet@v4
