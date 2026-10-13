@@ -5,7 +5,7 @@ import {
   TrendingUp, AlertTriangle, Clock, CheckCircle2, MoreVertical, Store, LogOut,
   Search, Filter, ShieldCheck, Database, Layers, ArrowUpRight, CheckCircle, Truck, FileText, LifeBuoy
 } from 'lucide-react';
-import { getDashboardMetrics, getInventarioUnificado, getClientes, updateEstadoOrden, getIncidencias } from '../services/api';
+import { getDashboardMetrics, getInventarioUnificado, getClientes, updateEstadoOrden, getIncidencias, FACTURACION_API } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export const DashboardPage = () => {
@@ -567,7 +567,7 @@ export const DashboardPage = () => {
                                 Ver Tracking
                               </Link>
                               <a
-                                href={`http://localhost:8084/api/facturas/orden/${ord.id}`}
+                                href={`${FACTURACION_API}/orden/${ord.id}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="btn-secondary btn-sm"
@@ -720,7 +720,7 @@ export const DashboardPage = () => {
                     </div>
                     <div style={{ marginTop: '0.85rem' }}>
                       <a
-                        href="http://localhost:8084/api/facturas/as400/ultimo-csv"
+                        href={`${FACTURACION_API}/as400/ultimo-csv`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-secondary btn-sm"

@@ -40,13 +40,19 @@ public class PagosListener {
         String numeroTarjeta = evento.containsKey("numeroTarjeta") ? (String) evento.get("numeroTarjeta") : "4500123456784242";
         String direccionDestino = evento.containsKey("direccionDestino") ? (String) evento.get("direccionDestino") : (String) evento.get("direccion");
 
-        // Determinar la ruta usando el enum tipado (compatible con strings legacy)
-        MetodoPago metodoPago;
-        if ("credito_propio".equalsIgnoreCase(metodoPagoStr) || "CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPagoStr)) {
-            metodoPago = MetodoPago.CREDITO_PROPIO_30D;
-        } else {
-            metodoPago = MetodoPago.TARJETA_PAYKLIK;
+        // Determinar la ruta usando el enum tipado y plazoDias (compatible con strings del frontend y API)
+        Object plazoObj = evento.get("plazoDias");
+        int plazoDias = 0;
+        if (plazoObj != null) {
+            try {
+                plazoDias = Integer.parseInt(plazoObj.toString());
+            } catch (NumberFormatException ignored) {}
         }
+
+        MetodoPago parsed = MetodoPago.fromValue(metodoPagoStr);
+        MetodoPago metodoPago = (plazoDias == 30 || parsed == MetodoPago.CREDITO_PROPIO_30D)
+                ? MetodoPago.CREDITO_PROPIO_30D
+                : MetodoPago.TARJETA_PAYKLIK;
 
         if (metodoPago == MetodoPago.CREDITO_PROPIO_30D) {
             // Sin pasarela, sin Circuit Breaker

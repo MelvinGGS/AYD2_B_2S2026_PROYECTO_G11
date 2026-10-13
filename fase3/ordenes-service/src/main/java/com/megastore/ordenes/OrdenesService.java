@@ -193,6 +193,17 @@ public class OrdenesService {
             orden.setEstado(nuevoEstado);
             ordenRepository.save(orden);
             System.out.println("[ORDENES] Estado de orden " + ordenId + " actualizado en BD a: " + nuevoEstado);
+            try {
+                Map<String, Object> trackingEvento = new HashMap<>();
+                trackingEvento.put("ordenId", orden.getId());
+                trackingEvento.put("id", orden.getId());
+                trackingEvento.put("estado", nuevoEstado);
+                trackingEvento.put("codigoRastreo", orden.getCodigoRastreo());
+                trackingEvento.put("metodoPago", orden.getMetodoPago());
+                rabbitTemplate.convertAndSend(exchangeName, "tracking.actualizado", trackingEvento);
+            } catch (Exception e) {
+                System.err.println("Advertencia RabbitMQ al emitir tracking.actualizado: " + e.getMessage());
+            }
         });
     }
 
