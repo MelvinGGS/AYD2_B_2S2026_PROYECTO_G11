@@ -15,12 +15,18 @@ public class PagosListener {
         this.pagosService = pagosService;
     }
 
+    /**
+     * Escucha el evento inventario.reservado desde RabbitMQ.
+     * Bifurca el flujo según el campo metodoPago del evento:
+     *   - TARJETA_PAYKLIK o payklik → Circuit Breaker + PayKlik
+     *   - CREDITO_PROPIO_30D o credito_propio → BNPL diferido 30 días
+     */
     @RabbitListener(queues = "${app.rabbitmq.queue-pago:pagos.queue}")
     public void recibirEventoInventarioReservado(Map<String, Object> evento) {
         System.out.println("[RABBITMQ] Evento recibido en Pagos: " + evento);
 
         String ordenId = (String) evento.get("ordenId");
-        
+
         Object montoObj = evento.get("monto") != null ? evento.get("monto") : evento.get("total");
         BigDecimal monto = BigDecimal.ZERO;
         if (montoObj instanceof Number) {
@@ -30,15 +36,29 @@ public class PagosListener {
         }
 
         String canal = evento.containsKey("canal") ? (String) evento.get("canal") : "Web Store";
-        String metodoPago = evento.containsKey("metodoPago") ? (String) evento.get("metodoPago") : "payklik";
+        String metodoPagoStr = evento.containsKey("metodoPago") ? (String) evento.get("metodoPago") : "TARJETA_PAYKLIK";
         String numeroTarjeta = evento.containsKey("numeroTarjeta") ? (String) evento.get("numeroTarjeta") : "4500123456784242";
         String direccionDestino = evento.containsKey("direccionDestino") ? (String) evento.get("direccionDestino") : (String) evento.get("direccion");
 
-        // Si la orden es bajo Crédito Propio (BNPL 30 días), procesar financiamiento sin consultar PayKlik
-        if ("credito_propio".equalsIgnoreCase(metodoPago) || "CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPago)) {
+        // Determinar la ruta usando el enum tipado y plazoDias (compatible con strings del frontend y API)
+        Object plazoObj = evento.get("plazoDias");
+        int plazoDias = 0;
+        if (plazoObj != null) {
+            try {
+                plazoDias = Integer.parseInt(plazoObj.toString());
+            } catch (NumberFormatException ignored) {}
+        }
+
+        MetodoPago parsed = MetodoPago.fromValue(metodoPagoStr);
+        MetodoPago metodoPago = (plazoDias == 30 || parsed == MetodoPago.CREDITO_PROPIO_30D)
+                ? MetodoPago.CREDITO_PROPIO_30D
+                : MetodoPago.TARJETA_PAYKLIK;
+
+        if (metodoPago == MetodoPago.CREDITO_PROPIO_30D) {
+            // Sin pasarela, sin Circuit Breaker
             pagosService.procesarCreditoPropioBNPL(ordenId, monto, canal, direccionDestino);
         } else {
-            // Iniciar cobro con el Circuit Breaker activo contra pasarela PayKlik
+            // Cobro con Circuit Breaker activo contra PayKlik
             pagosService.procesarPagoConCircuitBreaker(ordenId, monto, canal, numeroTarjeta, direccionDestino);
         }
     }

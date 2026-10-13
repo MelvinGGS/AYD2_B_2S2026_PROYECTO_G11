@@ -25,10 +25,21 @@ public class FacturacionListener {
         // Convierte el monto o total de forma segura sin importar la clave enviada
         Object totalObj = eventoPago.get("total") != null ? eventoPago.get("total") : eventoPago.get("monto");
         BigDecimal total = totalObj != null ? new BigDecimal(totalObj.toString()) : BigDecimal.ZERO;
+
+        String metodoPago = eventoPago.get("metodoPago") != null ? eventoPago.get("metodoPago").toString() : "PAYKLIK";
+        Object plazoObj = eventoPago.get("plazoDias");
+        int plazoDias = 0;
+        if (plazoObj != null) {
+            try {
+                plazoDias = Integer.parseInt(plazoObj.toString());
+            } catch (NumberFormatException ignored) {}
+        } else if ("credito_propio".equalsIgnoreCase(metodoPago) || "CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPago)) {
+            plazoDias = 30;
+        }
         
-        System.out.println("[RABBITMQ] Evento de pago confirmado recibido para orden: " + ordenId);
+        System.out.println("[RABBITMQ] Evento de pago confirmado recibido para orden: " + ordenId + " (" + metodoPago + ")");
         
-        // Dispara el flujo de facturación
-        facturacionService.generarYTransmitirDteSat(ordenId, total, direccionDestino);
+        // Dispara el flujo de facturacion propagando metodo de pago y plazo
+        facturacionService.generarYTransmitirDteSat(ordenId, total, direccionDestino, metodoPago, plazoDias);
     }
 }

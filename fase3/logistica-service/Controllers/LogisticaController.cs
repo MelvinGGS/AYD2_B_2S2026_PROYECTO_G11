@@ -12,12 +12,18 @@ namespace LogisticaService.Controllers
         private readonly LogisticaDbContext _dbContext;
         private readonly ILogger<LogisticaController> _logger;
         private readonly MockLogiExpressService _mockLogiExpress;
+        private readonly IConfiguration _configuration;
 
-        public LogisticaController(LogisticaDbContext dbContext, ILogger<LogisticaController> logger, MockLogiExpressService mockLogiExpress)
+        public LogisticaController(
+            LogisticaDbContext dbContext,
+            ILogger<LogisticaController> logger,
+            MockLogiExpressService mockLogiExpress,
+            IConfiguration configuration)
         {
             _dbContext = dbContext;
             _logger = logger;
             _mockLogiExpress = mockLogiExpress;
+            _configuration = configuration;
         }
 
         [HttpPost("despacho")]
@@ -26,7 +32,8 @@ namespace LogisticaService.Controllers
             try
             {
                 var origen = LogisticaManagerService.DeterminarOrigenOptimo(request.DireccionDestino);
-                
+                var metodoPago = LogisticaManagerService.NormalizarMetodoPago(request.MetodoPago);
+
                 var despacho = new Despacho
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -35,6 +42,7 @@ namespace LogisticaService.Controllers
                     DireccionDestino = request.DireccionDestino,
                     CodigoRastreo = GenerarCodigoRastreo(),
                     Estado = "PENDIENTE",
+                    MetodoPago = metodoPago,
                     FechaCreacion = DateTime.UtcNow
                 };
 
@@ -53,7 +61,7 @@ namespace LogisticaService.Controllers
                 _dbContext.Rastreos.Add(rastreo);
                 await _dbContext.SaveChangesAsync();
 
-                _logger.LogInformation($"Despacho creado: {despacho.Id}");
+                _logger.LogInformation($"Despacho creado: {despacho.Id} (metodoPago: {despacho.MetodoPago})");
                 return CreatedAtAction(nameof(ObtenerRastreo), new { codigoRastreo = despacho.CodigoRastreo }, despacho);
             }
             catch (Exception ex)
@@ -108,17 +116,20 @@ namespace LogisticaService.Controllers
                 _dbContext.Despachos.Update(despacho);
                 await _dbContext.SaveChangesAsync();
 
+                var ubicacion = request.UbicacionActual ?? despacho.UbicacionOrigen;
                 var rastreo = new Rastreo
                 {
                     Id = Guid.NewGuid().ToString(),
                     CodigoRastreo = despacho.CodigoRastreo,
                     Estado = request.NuevoEstado.ToUpper(),
-                    UbicacionActual = request.UbicacionActual ?? despacho.UbicacionOrigen,
+                    UbicacionActual = ubicacion,
                     Timestamp = DateTime.UtcNow
                 };
 
                 _dbContext.Rastreos.Add(rastreo);
                 await _dbContext.SaveChangesAsync();
+
+                LogisticaManagerService.PublicarEventoDespacho(_configuration, despacho, ubicacion);
 
                 _logger.LogInformation($"Despacho {id} actualizado a {request.NuevoEstado}");
                 return Ok(new { mensaje = "Estado actualizado", despacho });
@@ -191,6 +202,7 @@ namespace LogisticaService.Controllers
     {
         public string OrdenId { get; set; } = string.Empty;
         public string DireccionDestino { get; set; } = string.Empty;
+        public string? MetodoPago { get; set; }
     }
 
     public class UpdateEstadoRequest

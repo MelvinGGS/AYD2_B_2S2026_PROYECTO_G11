@@ -15,9 +15,17 @@ public class IntentoPago {
     private String ordenId;
     private String canal;
     private BigDecimal monto;
-    private String metodoPago;
+
+    /**
+     * Método de pago tipado. Se persiste como String para legibilidad en BD.
+     * Valores válidos: TARJETA_PAYKLIK, CREDITO_PROPIO_30D.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "metodo_pago", nullable = false)
+    private MetodoPago metodoPago;
+
     private String ultimosCuatroDigitos; // Cumplimiento PCI-DSS: NO CVV ni numero completo
-    private String resultado; // APROBADO, ENCOLADO_CONTINGENCIA, RECHAZADO
+    private String resultado; // APROBADO, ENCOLADO_CONTINGENCIA, RECHAZADO, APROBADO_CREDITO
     private String referenciaPayklik;
     private LocalDateTime fecha;
 
@@ -25,7 +33,7 @@ public class IntentoPago {
         this.fecha = LocalDateTime.now();
     }
 
-    public IntentoPago(String ordenId, String canal, BigDecimal monto, String metodoPago, String ultimosCuatroDigitos, String resultado, String referenciaPayklik) {
+    public IntentoPago(String ordenId, String canal, BigDecimal monto, MetodoPago metodoPago, String ultimosCuatroDigitos, String resultado, String referenciaPayklik) {
         this.ordenId = ordenId;
         this.canal = canal;
         this.monto = monto;
@@ -44,8 +52,8 @@ public class IntentoPago {
     public void setCanal(String canal) { this.canal = canal; }
     public BigDecimal getMonto() { return monto; }
     public void setMonto(BigDecimal monto) { this.monto = monto; }
-    public String getMetodoPago() { return metodoPago; }
-    public void setMetodoPago(String metodoPago) { this.metodoPago = metodoPago; }
+    public MetodoPago getMetodoPago() { return metodoPago; }
+    public void setMetodoPago(MetodoPago metodoPago) { this.metodoPago = metodoPago; }
     public String getUltimosCuatroDigitos() { return ultimosCuatroDigitos; }
     public void setUltimosCuatroDigitos(String ultimosCuatroDigitos) { this.ultimosCuatroDigitos = ultimosCuatroDigitos; }
     public String getResultado() { return resultado; }

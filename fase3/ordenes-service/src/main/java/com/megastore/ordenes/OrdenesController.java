@@ -38,6 +38,9 @@ public class OrdenesController {
     public ResponseEntity<Orden> actualizarEstado(@PathVariable String id, @RequestBody java.util.Map<String, String> body) {
         String nuevoEstado = body.get("estado");
         if (nuevoEstado != null) {
+            if ("CANCELADA".equalsIgnoreCase(nuevoEstado)) {
+                return ordenesService.cancelarOrden(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+            }
             ordenesService.actualizarEstadoOrden(id, nuevoEstado);
         }
         return ordenesService.obtenerOrdenPorId(id).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());

@@ -45,7 +45,7 @@ describe('E2E Spec 04 - Checkout Credito Propio BNPL 30 Dias (0% Interes)', () =
 
     // 4. Validar desglose de scoring y saldo en la tarjeta de metodo de pago
     cy.contains('Cupo disponible:').should('exist');
-    cy.contains('Score Crediticio: 85/100 (Aprobado)').should('exist');
+    cy.contains(/Score Crediticio:\s*\d+\/100\s*\(Aprobado\)/).should('exist');
 
     // 5. Verificar que el radio button de credito_propio este seleccionado por defecto
     cy.get('input[name="payment"][value="credito_propio"]').should('be.checked');

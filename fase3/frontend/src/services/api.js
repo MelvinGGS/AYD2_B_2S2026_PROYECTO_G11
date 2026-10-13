@@ -1,7 +1,21 @@
-// API service for SGO-Logic Frontend (Fase 2)
-// Integrado con backend Java Spring Boot (ordenes-service puerto 8081) y .NET 8 (notificaciones-service puerto 8086)
+// API service for SGO-Logic Frontend (Fase 3)
+// Integrado con backend Java Spring Boot (ordenes-service :8081, inventario-service :8082, facturacion-service :8084) y .NET 8 (:8086)
 
-const ORDENES_API = 'http://localhost:8081/api';
+const API_HOST = (typeof window !== 'undefined' && window.location && window.location.hostname)
+  ? window.location.hostname
+  : 'localhost';
+
+export const ORDENES_API = (typeof process !== 'undefined' && process.env?.REACT_APP_ORDENES_API)
+  ? process.env.REACT_APP_ORDENES_API
+  : (import.meta.env?.VITE_ORDENES_API || `http://${API_HOST}:8081/api`);
+
+export const INVENTARIO_API = (typeof process !== 'undefined' && process.env?.REACT_APP_INVENTARIO_API)
+  ? process.env.REACT_APP_INVENTARIO_API
+  : (import.meta.env?.VITE_INVENTARIO_API || `http://${API_HOST}:8082/api/inventario`);
+
+export const FACTURACION_API = (typeof process !== 'undefined' && process.env?.REACT_APP_FACTURACION_API)
+  ? process.env.REACT_APP_FACTURACION_API
+  : (import.meta.env?.VITE_FACTURACION_API || `http://${API_HOST}:8084/api/facturas`);
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 800) => {
   const controller = new AbortController();
@@ -152,9 +166,6 @@ const MOCK_ORDERS = [
     ]
   }
 ];
-const INVENTARIO_API = (typeof process !== 'undefined' && process.env?.REACT_APP_INVENTARIO_API)
-  ? process.env.REACT_APP_INVENTARIO_API
-  : (import.meta.env?.VITE_INVENTARIO_API || 'http://localhost:8082/api/inventario');
 
 const PRODUCT_IMAGE_FALLBACKS = {
   'prod-001': 'https://images.unsplash.com/photo-1517668808822-9efe02eae25c?auto=format&fit=crop&w=600&q=80',
@@ -696,4 +707,45 @@ export const getIncidencias = async () => {
   }
   return [];
 };
+
+export const cancelarOrdenCliente = async (ordenId) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/${encodeURIComponent(ordenId)}/cancelar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return normalizeOrder(data);
+    }
+  } catch (e) {
+    console.warn('Backend offline al cancelar orden:', e);
+  }
+  return updateEstadoOrden(ordenId, 'CANCELADA');
+};
+
+export const abonarCreditoCliente = async (clienteId, monto) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/credito/abono`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clienteId: String(clienteId || '1'),
+        monto: Number(monto) || 0
+      })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Backend offline al registrar abono de credito:', e);
+  }
+  return {
+    clienteId: String(clienteId || '1'),
+    montoAbonado: Number(monto) || 0,
+    mensaje: 'Abono a credito propio aplicado exitosamente',
+    fecha: new Date().toISOString()
+  };
+};
+
 

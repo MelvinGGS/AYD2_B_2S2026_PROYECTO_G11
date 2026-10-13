@@ -37,6 +37,10 @@ public class PagosService {
         this.restTemplate = restTemplate;
     }
 
+    // -------------------------------------------------------------------------
+    // RUTA 1: TARJETA_PAYKLIK — Con Circuit Breaker + DLQ fallback
+    // -------------------------------------------------------------------------
+
     @CircuitBreaker(name = "payklikService", fallbackMethod = "encolarPagoFallback")
     public IntentoPago procesarPagoConCircuitBreaker(String ordenId, BigDecimal monto, String canal, String numeroTarjeta) {
         return procesarPagoInterno(ordenId, monto, canal, numeroTarjeta, "Ciudad de Guatemala");
@@ -54,43 +58,32 @@ public class PagosService {
         request.put("ordenId", ordenId);
         request.put("monto", monto);
         request.put("numeroTarjeta", numeroTarjeta);
-        
+
         // Llamada REST real a la pasarela PayKlik
         Map respuesta = restTemplate.postForObject(payklikUrl, request, Map.class);
 
-        String refPayklik = respuesta != null && respuesta.get("referencia") != null 
-                ? respuesta.get("referencia").toString() 
+        String refPayklik = respuesta != null && respuesta.get("referencia") != null
+                ? respuesta.get("referencia").toString()
                 : "PK-UNKNOWN";
 
         // Cumplimiento PCI-DSS: Solo últimos 4 dígitos
-        String ultimosCuatro = (numeroTarjeta != null && numeroTarjeta.length() >= 4) 
-                ? numeroTarjeta.substring(numeroTarjeta.length() - 4) 
+        String ultimosCuatro = (numeroTarjeta != null && numeroTarjeta.length() >= 4)
+                ? numeroTarjeta.substring(numeroTarjeta.length() - 4)
                 : "4242";
 
         IntentoPago intento = new IntentoPago(
                 ordenId,
                 canal != null ? canal : "Web Store",
                 monto,
-                "TARJETA_CREDITO",
+                MetodoPago.TARJETA_PAYKLIK,
                 ultimosCuatro,
                 "APROBADO",
                 refPayklik
         );
         IntentoPago guardado = intentoPagoRepository.save(intento);
 
-        // Publicar pago confirmado
-        Map<String, Object> evento = new HashMap<>();
-        evento.put("ordenId", ordenId);
-        evento.put("monto", monto);
-        evento.put("total", monto);
-        evento.put("canal", canal != null ? canal : "Web Store");
-        evento.put("estado", "PAGADO");
-        evento.put("referenciaPayklik", refPayklik);
-        evento.put("direccionDestino", direccionDestino != null ? direccionDestino : "Ciudad de Guatemala");
-        evento.put("fecha", LocalDateTime.now().toString());
-
-        rabbitTemplate.convertAndSend(exchangeName, routingKeyConfirmado, evento);
-        System.out.println("[PAGO CONFIRMADO] Orden " + ordenId + " cobrada. Ref: " + refPayklik);
+        // Publicar evento unificado pago.confirmado
+        publicarEventoConfirmado(ordenId, monto, canal, MetodoPago.TARJETA_PAYKLIK, 0, "PAGADO", refPayklik, direccionDestino);
 
         return guardado;
     }
@@ -102,15 +95,15 @@ public class PagosService {
     public IntentoPago encolarPagoFallback(String ordenId, BigDecimal monto, String canal, String numeroTarjeta, Throwable throwable) {
         System.err.println("[CIRCUIT BREAKER ABIERTO] Pasarela no disponible. Fallback activado: " + throwable.getMessage());
 
-        String ultimosCuatro = (numeroTarjeta != null && numeroTarjeta.length() >= 4) 
-                ? numeroTarjeta.substring(numeroTarjeta.length() - 4) 
+        String ultimosCuatro = (numeroTarjeta != null && numeroTarjeta.length() >= 4)
+                ? numeroTarjeta.substring(numeroTarjeta.length() - 4)
                 : "4242";
 
         IntentoPago intento = new IntentoPago(
                 ordenId,
                 canal != null ? canal : "Web Store",
                 monto,
-                "TARJETA_CREDITO",
+                MetodoPago.TARJETA_PAYKLIK,
                 ultimosCuatro,
                 "ENCOLADO_CONTINGENCIA",
                 "PENDIENTE-REINTENTO"
@@ -130,6 +123,10 @@ public class PagosService {
         return guardado;
     }
 
+    // -------------------------------------------------------------------------
+    // RUTA 2: CREDITO_PROPIO_30D — Sin pasarela externa, sin Circuit Breaker
+    // -------------------------------------------------------------------------
+
     public IntentoPago procesarCreditoPropioBNPL(String ordenId, BigDecimal monto, String canal, String direccionDestino) {
         System.out.println("[BNPL CREDITO PROPIO] Aprobando financiamiento a 30 dias para Orden: " + ordenId);
 
@@ -138,29 +135,40 @@ public class PagosService {
                 ordenId,
                 canal != null ? canal : "Web Store",
                 monto,
-                "CREDITO_PROPIO_30D",
+                MetodoPago.CREDITO_PROPIO_30D,
                 "BNPL-30D",
                 "APROBADO_CREDITO",
                 refCredito
         );
         IntentoPago guardado = intentoPagoRepository.save(intento);
 
-        // Publicar pago confirmado en RabbitMQ para que Facturacion SAT y Logistica continuen normalmente
+        // Publicar evento unificado pago.confirmado (mismo routing key que TARJETA_PAYKLIK)
+        publicarEventoConfirmado(ordenId, monto, canal, MetodoPago.CREDITO_PROPIO_30D, 30, "PAGADO_BNPL", refCredito, direccionDestino);
+
+        return guardado;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helper privado: publica pago.confirmado unificado para ambas rutas
+    // -------------------------------------------------------------------------
+
+    private void publicarEventoConfirmado(String ordenId, BigDecimal monto, String canal,
+                                          MetodoPago metodoPago, int plazoDias, String estado,
+                                          String referencia, String direccionDestino) {
         Map<String, Object> evento = new HashMap<>();
         evento.put("ordenId", ordenId);
         evento.put("monto", monto);
         evento.put("total", monto);
         evento.put("canal", canal != null ? canal : "Web Store");
-        evento.put("metodoPago", "credito_propio");
-        evento.put("plazoDias", 30);
-        evento.put("estado", "PAGADO_BNPL");
-        evento.put("referenciaPayklik", refCredito);
+        evento.put("metodoPago", metodoPago.name());
+        evento.put("plazoDias", plazoDias);
+        evento.put("estado", estado);
+        evento.put("referencia", referencia);
+        evento.put("referenciaPayklik", referencia); // Retrocompatibilidad
         evento.put("direccionDestino", direccionDestino != null ? direccionDestino : "Ciudad de Guatemala");
         evento.put("fecha", LocalDateTime.now().toString());
 
         rabbitTemplate.convertAndSend(exchangeName, routingKeyConfirmado, evento);
-        System.out.println("[BNPL CONFIRMADO] Orden " + ordenId + " financiada a 30 dias con 0% recargo. Ref: " + refCredito);
-
-        return guardado;
+        System.out.println("[PAGO CONFIRMADO] Orden " + ordenId + " | Método: " + metodoPago + " | Ref: " + referencia);
     }
 }
