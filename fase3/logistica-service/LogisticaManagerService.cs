@@ -76,5 +76,55 @@ namespace LogisticaService
             }
             return false;
         }
+
+        public static void PublicarEventoDespacho(IConfiguration? configuration, Despacho despacho, string ubicacionActual)
+        {
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    var host = configuration?["RabbitMQ:Host"] ?? "localhost";
+                    var port = int.Parse(configuration?["RabbitMQ:Port"] ?? "5672");
+                    var username = configuration?["RabbitMQ:Username"] ?? "guest";
+                    var password = configuration?["RabbitMQ:Password"] ?? "guest";
+
+                    var factory = new ConnectionFactory
+                    {
+                        HostName = host,
+                        Port = port,
+                        UserName = username,
+                        Password = password,
+                        RequestedConnectionTimeout = TimeSpan.FromMilliseconds(500)
+                    };
+
+                    using var connection = factory.CreateConnection();
+                    using var channel = connection.CreateModel();
+                    channel.ExchangeDeclare(exchange: "sgologic.exchange", type: ExchangeType.Topic, durable: true);
+
+                    var payload = JsonSerializer.Serialize(new
+                    {
+                        ordenId = despacho.OrdenId,
+                        despachoId = despacho.Id,
+                        codigoRastreo = despacho.CodigoRastreo,
+                        estado = despacho.Estado,
+                        metodoPago = despacho.MetodoPago,
+                        ubicacionActual = ubicacionActual,
+                        fecha = DateTime.UtcNow.ToString("O")
+                    });
+
+                    var body = Encoding.UTF8.GetBytes(payload);
+                    channel.BasicPublish(
+                        exchange: "sgologic.exchange",
+                        routingKey: "despacho.estado",
+                        basicProperties: null,
+                        body: body
+                    );
+                }
+                catch
+                {
+                    // Tolerancia a fallos cuando RabbitMQ no esta activo (ej. pruebas en memoria)
+                }
+            });
+        }
     }
 }

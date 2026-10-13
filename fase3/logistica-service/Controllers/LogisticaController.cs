@@ -12,12 +12,18 @@ namespace LogisticaService.Controllers
         private readonly LogisticaDbContext _dbContext;
         private readonly ILogger<LogisticaController> _logger;
         private readonly MockLogiExpressService _mockLogiExpress;
+        private readonly IConfiguration _configuration;
 
-        public LogisticaController(LogisticaDbContext dbContext, ILogger<LogisticaController> logger, MockLogiExpressService mockLogiExpress)
+        public LogisticaController(
+            LogisticaDbContext dbContext,
+            ILogger<LogisticaController> logger,
+            MockLogiExpressService mockLogiExpress,
+            IConfiguration configuration)
         {
             _dbContext = dbContext;
             _logger = logger;
             _mockLogiExpress = mockLogiExpress;
+            _configuration = configuration;
         }
 
         [HttpPost("despacho")]
@@ -110,17 +116,20 @@ namespace LogisticaService.Controllers
                 _dbContext.Despachos.Update(despacho);
                 await _dbContext.SaveChangesAsync();
 
+                var ubicacion = request.UbicacionActual ?? despacho.UbicacionOrigen;
                 var rastreo = new Rastreo
                 {
                     Id = Guid.NewGuid().ToString(),
                     CodigoRastreo = despacho.CodigoRastreo,
                     Estado = request.NuevoEstado.ToUpper(),
-                    UbicacionActual = request.UbicacionActual ?? despacho.UbicacionOrigen,
+                    UbicacionActual = ubicacion,
                     Timestamp = DateTime.UtcNow
                 };
 
                 _dbContext.Rastreos.Add(rastreo);
                 await _dbContext.SaveChangesAsync();
+
+                LogisticaManagerService.PublicarEventoDespacho(_configuration, despacho, ubicacion);
 
                 _logger.LogInformation($"Despacho {id} actualizado a {request.NuevoEstado}");
                 return Ok(new { mensaje = "Estado actualizado", despacho });

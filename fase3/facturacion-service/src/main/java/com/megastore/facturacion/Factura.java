@@ -17,6 +17,8 @@ public class Factura {
     private BigDecimal total;
     private String rutaArchivoXml;
     private LocalDateTime fechaEmision;
+    private String metodoPago;
+    private Integer plazoDias;
 
     // Getters y Setters
     public Long getId() { return id; }
@@ -35,4 +37,8 @@ public class Factura {
     public void setRutaArchivoXml(String rutaArchivoXml) { this.rutaArchivoXml = rutaArchivoXml; }
     public LocalDateTime getFechaEmision() { return fechaEmision; }
     public void setFechaEmision(LocalDateTime fechaEmision) { this.fechaEmision = fechaEmision; }
+    public String getMetodoPago() { return metodoPago; }
+    public void setMetodoPago(String metodoPago) { this.metodoPago = metodoPago; }
+    public Integer getPlazoDias() { return plazoDias; }
+    public void setPlazoDias(Integer plazoDias) { this.plazoDias = plazoDias; }
 }
