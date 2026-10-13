@@ -84,6 +84,8 @@ public class PagosService {
         evento.put("monto", monto);
         evento.put("total", monto);
         evento.put("canal", canal != null ? canal : "Web Store");
+        evento.put("metodoPago", "PAYKLIK");
+        evento.put("plazoDias", 0);
         evento.put("estado", "PAGADO");
         evento.put("referenciaPayklik", refPayklik);
         evento.put("direccionDestino", direccionDestino != null ? direccionDestino : "Ciudad de Guatemala");

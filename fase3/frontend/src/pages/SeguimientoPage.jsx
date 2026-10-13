@@ -76,7 +76,8 @@ export const SeguimientoPage = () => {
 
     try {
       // Intento primario: WebSockets nativos reactivos
-      ws = new WebSocket(`ws://localhost:8086/ws/tracking/${encodeURIComponent(orden.id)}`);
+      const notifHost = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : 'localhost';
+      ws = new WebSocket(`ws://${notifHost}:8086/ws/tracking/${encodeURIComponent(orden.id)}`);
 
       ws.onopen = () => {
         setIsLiveReactive(true);
@@ -101,7 +102,7 @@ export const SeguimientoPage = () => {
         // Fallback a Server-Sent Events (SSE) si WebSocket falla
         if (!isConnected && typeof EventSource !== 'undefined') {
           console.log('[PUSH REACTIVO] Activando fallback reactivo SSE...');
-          eventSource = new EventSource(`http://localhost:8086/api/notificaciones/stream/${encodeURIComponent(orden.id)}`);
+          eventSource = new EventSource(`http://${notifHost}:8086/api/notificaciones/stream/${encodeURIComponent(orden.id)}`);
           eventSource.onopen = () => setIsLiveReactive(true);
           eventSource.onmessage = async (e) => {
             try {

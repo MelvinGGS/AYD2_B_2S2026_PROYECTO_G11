@@ -48,10 +48,23 @@ public class FacturacionService {
     }
 
     public String generarYTransmitirDteSat(String ordenId, BigDecimal total) {
-        return generarYTransmitirDteSat(ordenId, total, "Ciudad de Guatemala");
+        return generarYTransmitirDteSat(ordenId, total, "Ciudad de Guatemala", "PAYKLIK", 0);
     }
 
     public String generarYTransmitirDteSat(String ordenId, BigDecimal total, String direccionDestino) {
+        return generarYTransmitirDteSat(ordenId, total, direccionDestino, "PAYKLIK", 0);
+    }
+
+    public String generarYTransmitirDteSat(String ordenId, BigDecimal total, String direccionDestino, String metodoPago, int plazoDias) {
+        boolean esBnpl = metodoPago != null && (
+                "credito_propio".equalsIgnoreCase(metodoPago.trim()) ||
+                "CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPago.trim()) ||
+                "BNPL".equalsIgnoreCase(metodoPago.trim()) ||
+                metodoPago.toLowerCase().contains("credito")
+        );
+        String metodoPagoNorm = esBnpl ? "CREDITO_PROPIO_30D" : "PAYKLIK";
+        int plazoNorm = esBnpl ? (plazoDias > 0 ? plazoDias : 30) : 0;
+
         String serie = "A" + (new Random().nextInt(90) + 10);
         int numero = new Random().nextInt(900000) + 100000;
         String autorizacion = "FEL-" + LocalDateTime.now().getYear() + "-" + (new Random().nextInt(90000) + 10000);
@@ -82,7 +95,7 @@ public class FacturacionService {
         // TAREA: Reintentos con Backoff Exponencial
         for (int intento = 1; intento <= 3; intento++) {
             try {
-                System.out.println("[TRANSMISIÓN SAT] Intento " + intento + "/3 para orden " + ordenId + "...");
+                System.out.println("[TRANSMISION SAT] Intento " + intento + "/3 para orden " + ordenId + "...");
                 
                 // Llamada real al servicio validador de SAT FEL
                 ResponseEntity<String> response = restTemplate.postForEntity(satUrl, xmlDte, String.class);
@@ -92,7 +105,7 @@ public class FacturacionService {
                     break;
                 }
             } catch (Exception e) {
-                System.err.println("Intento " + intento + " fallido ante SAT. Razón: " + e.getMessage());
+                System.err.println("Intento " + intento + " fallido ante SAT. Razon: " + e.getMessage());
                 try {
                     Thread.sleep(esperaMs);
                 } catch (InterruptedException ignored) {}
@@ -100,10 +113,10 @@ public class FacturacionService {
             }
         }
 
-        // TAREA: Desvío a DLQ si se agotan intentos (Lanza excepción para que RabbitMQ lo mueva)
+        // TAREA: Desvio a DLQ si se agotan intentos (Lanza excepcion para que RabbitMQ lo mueva)
         if (!satAutorizada) {
-            System.err.println("[ERROR CRÍTICO] La SAT no respondió tras 3 intentos. Desviando orden " + ordenId + " a DLQ.");
-            throw new RuntimeException("Fallo de comunicación con la SAT. Enviando a DLQ.");
+            System.err.println("[ERROR CRITICO] La SAT no respondio tras 3 intentos. Desviando orden " + ordenId + " a DLQ.");
+            throw new RuntimeException("Fallo de comunicacion con la SAT. Enviando a DLQ.");
         }
 
         // Si es exitoso, guardar en disco y BD
@@ -117,20 +130,24 @@ public class FacturacionService {
         factura.setTotal(total);
         factura.setRutaArchivoXml(rutaArchivo);
         factura.setFechaEmision(LocalDateTime.now());
+        factura.setMetodoPago(metodoPagoNorm);
+        factura.setPlazoDias(plazoNorm);
         facturaRepository.save(factura);
 
-        System.out.println("[SAT APROBADA] Factura " + autorizacion + " guardada en BD y disco.");
+        System.out.println("[SAT APROBADA] Factura " + autorizacion + " guardada en BD y disco (" + metodoPagoNorm + ").");
 
-        // Emitir evento para activar el flujo logístico con dirección real del cliente
+        // Emitir evento para activar el flujo logistico con direccion real y metodo de pago del cliente
         try {
             java.util.Map<String, Object> despachoMsg = new java.util.HashMap<>();
             despachoMsg.put("ordenId", ordenId);
             despachoMsg.put("direccionDestino", (direccionDestino != null && !direccionDestino.isBlank()) ? direccionDestino : "Ciudad de Guatemala");
             despachoMsg.put("autorizacionSat", autorizacion);
+            despachoMsg.put("metodoPago", metodoPagoNorm);
+            despachoMsg.put("plazoDias", plazoNorm);
             despachoMsg.put("fecha", LocalDateTime.now().toString());
 
             rabbitTemplate.convertAndSend(exchangeName, "despacho.solicitado", despachoMsg);
-            System.out.println("[RABBITMQ] Evento 'despacho.solicitado' publicado para orden: " + ordenId);
+            System.out.println("[RABBITMQ] Evento 'despacho.solicitado' publicado para orden: " + ordenId + " con metodoPago=" + metodoPagoNorm);
         } catch (Exception e) {
             System.err.println("Advertencia RabbitMQ al emitir despacho: " + e.getMessage());
         }
@@ -152,34 +169,7 @@ public class FacturacionService {
         }
     }
 
-    // // TAREA: Tarea programada AS/400
-    // @Scheduled(cron = "${app.erp.export-cron:0 */30 * * * *}")
-    // public void exportarResumenErpAS400() {
-    //     String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
-    //     String nombreArchivo = "resumen_erp_" + timestamp + ".csv";
-    //     try {
-    //         File dir = new File(uploadsDir);
-    //         if (!dir.exists()) dir.mkdirs();
-    //         File csvFile = new File(dir, nombreArchivo);
-
-    //         try (FileWriter writer = new FileWriter(csvFile)) {
-    //             writer.write("FECHA,ORDEN_ID,CANAL,TOTAL,NIT_EMISOR,AUTORIZACION_SAT\n");
-    //             List<Factura> facturas = facturaRepository.findAll();
-    //             if (facturas.isEmpty()) {
-    //                 writer.write(String.format("%s,ORD-SYNC,OMNICANAL,0.00,103849204,AS400-BATCH\n", LocalDateTime.now()));
-    //             } else {
-    //                 for (Factura f : facturas) {
-    //                     writer.write(String.format("%s,%s,OMNICANAL,%s,103849204,%s\n",
-    //                             f.getFechaEmision(), f.getOrdenId(), f.getTotal(), f.getAutorizacion()));
-    //                 }
-    //             }
-    //         }
-    //         System.out.println("[ERP AS/400 EXPORT] Archivo estructurado generado: " + nombreArchivo);
-    //     } catch (Exception e) {
-    //         System.err.println("Error exportando a ERP: " + e.getMessage());
-    //     }
-    // }
-    // TAREA: Tarea programada AS/400 (Extendida para BNPL 30 días)
+    // Tarea programada ACL AS/400 (Extendida para BNPL 30 dias y pagos de contado)
     @Scheduled(cron = "${app.erp.export-cron:0 */30 * * * *}")
     public void exportarResumenErpAS400() {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
@@ -190,7 +180,6 @@ public class FacturacionService {
             File csvFile = new File(dir, nombreArchivo);
 
             try (FileWriter writer = new FileWriter(csvFile)) {
-                // Nueva cabecera con METODO_PAGO y PLAZO_DIAS
                 writer.write("FECHA,ORDEN_ID,CANAL,TOTAL,NIT_EMISOR,AUTORIZACION_SAT,METODO_PAGO,PLAZO_DIAS\n");
                 
                 List<Factura> facturas = facturaRepository.findAll();
@@ -198,10 +187,12 @@ public class FacturacionService {
                     writer.write(String.format("%s,ORD-SYNC,OMNICANAL,0.00,103849204,AS400-BATCH,NA,0\n", LocalDateTime.now()));
                 } else {
                     for (Factura f : facturas) {
-                        // Para la Fase 3, inferimos si fue crédito a 30 días o pago de contado (PayKlik)
-                        // Si la BD de factura se actualiza luego con metodoPago, leerlo de f.getMetodoPago()
-                        String metodoPago = "CREDITO_PROPIO_30D"; // Simulación/Mock del método
-                        int plazoDias = "CREDITO_PROPIO_30D".equals(metodoPago) ? 30 : 0;
+                        String metodoPago = (f.getMetodoPago() != null && !f.getMetodoPago().isBlank())
+                                ? f.getMetodoPago()
+                                : "PAYKLIK";
+                        int plazoDias = f.getPlazoDias() != null
+                                ? f.getPlazoDias()
+                                : ("CREDITO_PROPIO_30D".equalsIgnoreCase(metodoPago) ? 30 : 0);
                         
                         writer.write(String.format("%s,%s,OMNICANAL,%s,103849204,%s,%s,%d\n",
                                 f.getFechaEmision(), f.getOrdenId(), f.getTotal(), f.getAutorizacion(), metodoPago, plazoDias));
