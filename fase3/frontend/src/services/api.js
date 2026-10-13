@@ -649,13 +649,18 @@ export const getDashboardMetrics = async () => {
     const [resOrdenes, payklikHealth, satHealth, logiHealth, mqHealth, pagosContingencia] = await Promise.all([
       fetchWithTimeout(`${ORDENES_API}/ordenes`, {}, 1000).catch(() => null),
       pingServiceHealth('PayKlik API', `${PAGOS_API}/payklik/modo`, (data, latencia) => {
-        if (data && data.falloSimulado) {
-          return { nombre: 'PayKlik API', estado: 'Caída Simulada (DLQ Activo)', statusType: 'error', latencia };
+        if (data && (data.deshabilitado || data.falloSimulado)) {
+          return { nombre: 'PayKlik API', estado: 'Deshabilitado (DLQ Activo)', statusType: 'error', latencia };
         }
         return null;
       }),
-      pingServiceHealth('SAT Facturación XML', `${FACTURACION_API}/ORD-HEALTHCHECK`, null, true),
-      pingServiceHealth('LogiExpress API', `${INVENTARIO_API}/unificado`),
+      pingServiceHealth('SAT Facturación XML', `http://${API_HOST}:8084/api/sat/modo`, (data, latencia) => {
+        if (data && data.deshabilitado) {
+          return { nombre: 'SAT Facturación XML', estado: 'Deshabilitado (Contingencia)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      pingServiceHealth('LogiExpress API', `http://${API_HOST}:8085/`),
       pingServiceHealth('RabbitMQ Bus Eventos', `${NOTIFICACIONES_API}/health`),
       fetchWithTimeout(`${PAGOS_API}/pagos/contingencia`, {}, 700).then(r => r.ok ? r.json() : []).catch(() => [])
     ]);

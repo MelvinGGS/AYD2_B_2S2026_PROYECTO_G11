@@ -40,7 +40,7 @@ export const Footer = () => {
           <p>© 2026 MegaStore Retail Group. Todos los derechos reservados.</p>
           <div className="footer-status">
             <ShieldCheck size={16} className="status-icon" />
-            <span>Sistemas Omnicanal Operativos</span>
+            <span>Compra 100% Segura</span>
           </div>
         </div>
       </div>

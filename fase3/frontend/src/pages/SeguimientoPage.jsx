@@ -322,7 +322,7 @@ export const SeguimientoPage = () => {
             {/* Timeline Panel */}
             <div className="timeline-panel glass-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h3 className="panel-title" style={{ margin: 0 }}>Estado de Transmisión</h3>
+                <h3 className="panel-title" style={{ margin: 0 }}>Estado del Pedido</h3>
                 {isLiveReactive ? (
                   <span style={{
                     fontSize: '0.78rem',
@@ -336,10 +336,10 @@ export const SeguimientoPage = () => {
                     gap: '6px'
                   }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
-                    WebSockets Activo (Push Reactivo)
+                    Actualización en tiempo real
                   </span>
                 ) : (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Polling Respaldo</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Actualizado</span>
                 )}
               </div>
 
@@ -372,12 +372,10 @@ export const SeguimientoPage = () => {
                   <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
                   <div>
                     <strong style={{ color: '#fbbf24', display: 'block' }}>
-                      {!pagoStatus.online
-                        ? 'Microservicio de Pagos (:8083) Detenido — Evento Persistido en RabbitMQ (pagos.queue)'
-                        : 'Pasarela PayKlik en Contingencia — Cobro Resguardado en RabbitMQ DLQ (pagos.dlq)'}
+                      Procesamiento de Pago en Curso
                     </strong>
                     <span>
-                      Tu orden y stock están asegurados. El procesamiento financiero se completará automáticamente en cuanto el servicio de pagos se restablezca.
+                      Tu orden y productos están reservados. La confirmación del pago se completará automáticamente en breve sin afectar tu entrega.
                     </span>
                   </div>
                 </div>
@@ -419,13 +417,19 @@ export const SeguimientoPage = () => {
                 </div>
 
                 <div className="detail-item">
-                  <span className="detail-label">Auditoría de Cobro (:8083)</span>
-                  <span className="detail-val" style={{ fontWeight: 600, color: !pagoStatus.online ? '#fbbf24' : '#34d399' }}>
-                    {!pagoStatus.online
-                      ? 'En Cola RabbitMQ (Contenedor Pagos Offline)'
-                      : (pagoStatus.intentos?.length > 0
-                        ? `${pagoStatus.intentos[pagoStatus.intentos.length - 1].resultado} (${pagoStatus.intentos[pagoStatus.intentos.length - 1].referenciaPayklik})`
-                        : (orden.estado !== 'CREADA' ? 'CONFIRMADO' : 'PENDIENTE EN COLA MQ'))}
+                  <span className="detail-label">Estado del pago</span>
+                  <span className="detail-val" style={{ fontWeight: 600, color: '#34d399' }}>
+                    {esMetodoCreditoPropio(orden.metodoPago)
+                      ? 'Aprobado (Crédito Propio 30 Días)'
+                      : (orden.estado === 'CANCELADA'
+                        ? 'Cancelado'
+                        : (!pagoStatus.online || orden.estado === 'PAGO_EN_CONTINGENCIA'
+                          ? 'En proceso de confirmación'
+                          : (pagoStatus.intentos?.length > 0
+                            ? (pagoStatus.intentos[pagoStatus.intentos.length - 1].resultado === 'ENCOLADO_CONTINGENCIA'
+                              ? 'En proceso de confirmación'
+                              : 'Pago Autorizado')
+                            : (orden.estado !== 'CREADA' ? 'Pago Autorizado' : 'En proceso de confirmación'))))}
                   </span>
                 </div>
 
@@ -467,7 +471,6 @@ export const SeguimientoPage = () => {
               <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
                   <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>Facturación Electrónica SAT (FEL)</span>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Documento Tributario Electrónico emitido con firma digital</span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   {esMetodoCreditoPropio(orden.metodoPago) && orden.estado !== 'CANCELADA' && (
