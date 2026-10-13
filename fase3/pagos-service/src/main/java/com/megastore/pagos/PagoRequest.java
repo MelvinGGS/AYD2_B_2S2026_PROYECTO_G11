@@ -1,30 +1,20 @@
 package com.megastore.pagos;
 
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 /**
  * DTO para solicitar un pago desde el endpoint REST.
  * El campo metodoPago es tipado con el enum para garantizar valores válidos.
- * Si el cliente envía un valor inválido, Spring devuelve automáticamente un 400 Bad Request.
  */
 public class PagoRequest {
 
-    @NotBlank(message = "ordenId es obligatorio")
     private String ordenId;
-
-    @NotNull(message = "monto es obligatorio")
-    @DecimalMin(value = "0.01", message = "El monto debe ser mayor a cero")
     private BigDecimal monto;
-
     private String canal;
 
     /**
      * Valores aceptados: TARJETA_PAYKLIK o CREDITO_PROPIO_30D.
      */
-    @NotNull(message = "metodoPago es obligatorio. Valores validos: TARJETA_PAYKLIK, CREDITO_PROPIO_30D")
     private MetodoPago metodoPago;
 
     /**

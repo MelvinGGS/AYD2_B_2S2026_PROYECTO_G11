@@ -1,9 +1,9 @@
 package com.megastore.pagos;
 
-import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -40,12 +40,24 @@ public class PagosController {
      *   - CREDITO_PROPIO_30D → registra financiamiento diferido sin pasarela
      *
      * En ambos casos publica el evento unificado pago.confirmado en RabbitMQ.
-     *
-     * @param request DTO validado. Si metodoPago no es uno de los dos valores válidos,
-     *                Spring retorna 400 Bad Request automáticamente (deserialización del enum).
      */
     @PostMapping("/procesar")
-    public ResponseEntity<?> procesarPago(@Valid @RequestBody PagoRequest request) {
+    public ResponseEntity<?> procesarPago(@RequestBody PagoRequest request) {
+        if (request == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El cuerpo de la solicitud no puede estar vacío"));
+        }
+
+        if (request.getOrdenId() == null || request.getOrdenId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "ordenId es obligatorio"));
+        }
+
+        if (request.getMonto() == null || request.getMonto().compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "monto debe ser mayor a cero"));
+        }
+
+        if (request.getMetodoPago() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "metodoPago es obligatorio. Valores validos: TARJETA_PAYKLIK, CREDITO_PROPIO_30D"));
+        }
 
         if (request.getMetodoPago() == MetodoPago.TARJETA_PAYKLIK) {
             if (request.getNumeroTarjeta() == null || request.getNumeroTarjeta().isBlank()) {
