@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - 'release/**'
       - 'feature/**'
     tags:
       - 'v*'
@@ -52,11 +53,14 @@ jobs:
 
       - name: Compilar Microservicios Java en paralelo
         run: |
-          mvn -B compile -f fase3/ordenes-service/pom.xml &
-          mvn -B compile -f fase3/inventario-service/pom.xml &
-          mvn -B compile -f fase3/pagos-service/pom.xml &
-          mvn -B compile -f fase3/facturacion-service/pom.xml &
-          wait
+          pids=()
+          mvn -B compile -f fase3/ordenes-service/pom.xml & pids+=($!)
+          mvn -B compile -f fase3/inventario-service/pom.xml & pids+=($!)
+          mvn -B compile -f fase3/pagos-service/pom.xml & pids+=($!)
+          mvn -B compile -f fase3/facturacion-service/pom.xml & pids+=($!)
+          for pid in "${pids[@]}"; do
+            wait "$pid"
+          done
 
       # 3. Backends .NET 8
       - name: Configurar .NET SDK 8.0
@@ -74,9 +78,12 @@ jobs:
 
       - name: Compilar Microservicios .NET 8 en paralelo
         run: |
-          dotnet build fase3/logistica-service/logistica-service.csproj --nologo &
-          dotnet build fase3/notificaciones-service/notificaciones-service.csproj --nologo &
-          wait
+          pids=()
+          dotnet build fase3/logistica-service/logistica-service.csproj --nologo & pids+=($!)
+          dotnet build fase3/notificaciones-service/notificaciones-service.csproj --nologo & pids+=($!)
+          for pid in "${pids[@]}"; do
+            wait "$pid"
+          done
 
   # ETAPA 2: TEST (Pruebas automáticas - Compuerta de calidad)
   test:
@@ -87,6 +94,7 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
+      # 1. Configuración de entornos y cachés
       - name: Configurar Node.js 20 (con caché)
         uses: actions/setup-node@v4
         with:
@@ -94,11 +102,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: fase3/frontend/package-lock.json
 
-      - name: Ejecutar Pruebas Unitarias Frontend (Checkout & BNPL)
+      - name: Instalar dependencias Frontend
         working-directory: fase3/frontend
-        run: |
-          npm ci --prefer-offline --no-audit
-          npm test
+        run: npm ci --prefer-offline --no-audit
 
       - name: Configurar Java JDK 17 (con caché)
         uses: actions/setup-java@v4
@@ -107,12 +113,6 @@ jobs:
           java-version: '17'
           cache: 'maven'
           cache-dependency-path: 'fase3/**/pom.xml'
-
-      - name: Ejecutar Pruebas Backend Java
-        run: |
-          mvn -B test -f fase3/pagos-service/pom.xml &
-          mvn -B test -f fase3/inventario-service/pom.xml &
-          wait
 
       - name: Configurar .NET SDK 8.0
         uses: actions/setup-dotnet@v4
@@ -127,9 +127,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Ejecutar Pruebas de Integración Logística (.NET 8 xUnit)
+      # 2. Ejecución concurrente de suites de pruebas con control de PIDs
+      - name: Ejecutar Suites de Pruebas en Paralelo (Frontend, Java y .NET)
         run: |
-          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --nologo --logger "console;verbosity=normal"
+          pids=()
+          echo "Iniciando pruebas unitarias Frontend (Checkout & BNPL)..."
+          (cd fase3/frontend && npm test) & pids+=($!)
+
+          echo "Iniciando pruebas backend Java (Pagos e Inventario)..."
+          mvn -B test -f fase3/pagos-service/pom.xml & pids+=($!)
+          mvn -B test -f fase3/inventario-service/pom.xml & pids+=($!)
+
+          echo "Iniciando pruebas de integracion backend .NET (Logistica xUnit)..."
+          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --nologo --logger "console;verbosity=normal" & pids+=($!)
+
+          failed=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Error: Una o mas suites de pruebas fallaron."
+            exit 1
+          fi
+          echo "Todas las suites de pruebas finalizaron exitosamente."
 
   # ETAPA 3: DEPLOY (Despliegue automatizado)
   deploy:
@@ -158,10 +181,54 @@ jobs:
             else
               cd /home/${USER}/AYD2_B_2S2026_PROYECTO_G11
             fi
+
+            PREV_HEAD=$(git rev-parse HEAD)
             git pull origin develop
+            CURR_HEAD=$(git rev-parse HEAD)
             cd fase3
-            docker compose build frontend
-            docker compose up -d
+
+            SERVICES=()
+            if [ "$PREV_HEAD" = "$CURR_HEAD" ]; then
+              echo "No se detectaron nuevos commits; verificando contenedores en ejecucion..."
+            else
+              CHANGED_FILES=$(git diff --name-only "$PREV_HEAD" "$CURR_HEAD")
+              echo "Archivos modificados detectados entre $PREV_HEAD y $CURR_HEAD:"
+              echo "$CHANGED_FILES"
+
+              if echo "$CHANGED_FILES" | grep -q '^fase3/frontend/'; then
+                SERVICES+=("frontend")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/ordenes-service/'; then
+                SERVICES+=("ordenes-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/inventario-service/'; then
+                SERVICES+=("inventario-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/pagos-service/'; then
+                SERVICES+=("pagos-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/facturacion-service/'; then
+                SERVICES+=("facturacion-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/logistica-service/'; then
+                SERVICES+=("logistica-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/notificaciones-service/'; then
+                SERVICES+=("notificaciones-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/docker-compose.yml'; then
+                SERVICES=("frontend" "ordenes-service" "inventario-service" "pagos-service" "facturacion-service" "logistica-service" "notificaciones-service")
+              fi
+            fi
+
+            if [ ${#SERVICES[@]} -gt 0 ]; then
+              echo "Reconstruyendo y levantando servicios modificados: ${SERVICES[*]}"
+              docker compose up -d --build "${SERVICES[@]}"
+            else
+              echo "Levantando servicios sin reconstruccion de imagenes..."
+              docker compose up -d
+            fi
+
             echo "Despliegue completado exitosamente en Compute Engine."
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
           EOF
