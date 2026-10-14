@@ -3,7 +3,7 @@ import { Link, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, ShoppingBag, Users, Settings, RefreshCw,
   TrendingUp, AlertTriangle, Clock, CheckCircle2, MoreVertical, Store, LogOut,
-  Search, ShieldCheck, FileText, LifeBuoy
+  Search, ShieldCheck, FileText, LifeBuoy, MessageSquare, Send, X
 } from 'lucide-react';
 import {
   getDashboardMetrics,
@@ -11,12 +11,17 @@ import {
   getClientes,
   updateEstadoOrden,
   getIncidencias,
+  responderIncidenciaAdmin,
   getModoPayKlik,
   toggleModoPayKlik,
   getModoSat,
   toggleModoSat,
   getModoInventario,
   toggleModoInventario,
+  getModoLogistica,
+  toggleModoLogistica,
+  getModoNotificaciones,
+  toggleModoNotificaciones,
   getPagosContingencia,
   reprocesarPagosContingencia,
   ajustarStockInventario,
@@ -38,10 +43,41 @@ export const DashboardPage = () => {
   const [modoPayklik, setModoPayklik] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
   const [modoSat, setModoSat] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
   const [modoInventario, setModoInventario] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
-  const [modoLogistica, setModoLogistica] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
-  const [modoNotificaciones, setModoNotificaciones] = useState({ deshabilitado: false, estadoServicio: 'HABILITADO' });
+  const [modoLogistica, setModoLogistica] = useState(() => getModoLogistica());
+  const [modoNotificaciones, setModoNotificaciones] = useState(() => getModoNotificaciones());
   const [pagosContingencia, setPagosContingencia] = useState([]);
   const [opsBannerMsg, setOpsBannerMsg] = useState('');
+  const [togglingPayklik, setTogglingPayklik] = useState(false);
+  const [togglingSat, setTogglingSat] = useState(false);
+  const [reprocesandoDlq, setReprocesandoDlq] = useState(false);
+  const [showAlertasModal, setShowAlertasModal] = useState(false);
+  const [alertasTab, setAlertasTab] = useState('contingencia');
+  const [ticketEnRespuesta, setTicketEnRespuesta] = useState(null);
+  const [textoRespuesta, setTextoRespuesta] = useState('');
+  const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
+  const [msgRespuestaExito, setMsgRespuestaExito] = useState('');
+
+  const handleEnviarRespuestaTicket = async (e) => {
+    e.preventDefault();
+    if (!ticketEnRespuesta?.id || !textoRespuesta.trim()) return;
+    setEnviandoRespuesta(true);
+    try {
+      await responderIncidenciaAdmin(ticketEnRespuesta.id, textoRespuesta.trim());
+      setIncidencias(prev => prev.map(inc =>
+        inc.id === ticketEnRespuesta.id
+          ? { ...inc, respuesta: textoRespuesta.trim(), estado: 'ATENDIDA' }
+          : inc
+      ));
+      setMsgRespuestaExito(`Respuesta registrada para el ticket TCK-${ticketEnRespuesta.id}.`);
+      setTicketEnRespuesta(null);
+      setTextoRespuesta('');
+      setTimeout(() => setMsgRespuestaExito(''), 3500);
+    } catch (err) {
+      console.warn('Error al responder ticket:', err);
+    } finally {
+      setEnviandoRespuesta(false);
+    }
+  };
 
   const handleStatusChange = async (ordenId, newStatus) => {
     try {
@@ -89,6 +125,8 @@ export const DashboardPage = () => {
       if (dataModoPk) setModoPayklik(dataModoPk);
       if (dataModoSat) setModoSat(dataModoSat);
       if (dataModoInv) setModoInventario(dataModoInv);
+      setModoLogistica(getModoLogistica());
+      setModoNotificaciones(getModoNotificaciones());
       if (Array.isArray(dataContingencia)) setPagosContingencia(dataContingencia);
       if (dataInventario && dataInventario.length > 0) {
         setInventario(dataInventario);
@@ -124,6 +162,7 @@ export const DashboardPage = () => {
   };
 
   const handleTogglePayklikMode = async () => {
+    setTogglingPayklik(true);
     try {
       const nextState = !modoPayklik.deshabilitado;
       const res = await toggleModoPayKlik(nextState);
@@ -135,11 +174,14 @@ export const DashboardPage = () => {
       );
       await fetchMetrics();
     } catch (err) {
-      setOpsBannerMsg('No se pudo conectar con pagos-service (:8083): Contenedor fuera de linea.');
+      setOpsBannerMsg('No se pudo conectar con la pasarela de pagos: Servicio fuera de línea.');
+    } finally {
+      setTogglingPayklik(false);
     }
   };
 
   const handleToggleSatMode = async () => {
+    setTogglingSat(true);
     try {
       const nextState = !modoSat.deshabilitado;
       const res = await toggleModoSat(nextState);
@@ -151,7 +193,9 @@ export const DashboardPage = () => {
       );
       await fetchMetrics();
     } catch (err) {
-      setOpsBannerMsg('No se pudo conectar con facturacion-service (:8084).');
+      setOpsBannerMsg('No se pudo conectar con el servicio de facturación SAT: Servicio fuera de línea.');
+    } finally {
+      setTogglingSat(false);
     }
   };
 
@@ -167,37 +211,52 @@ export const DashboardPage = () => {
       );
       await fetchMetrics();
     } catch (err) {
-      setOpsBannerMsg('No se pudo conectar con inventario-service (:8082).');
+      setOpsBannerMsg('No se pudo conectar con el servicio central de inventario: Servicio fuera de línea.');
     }
   };
 
-  const handleToggleLogisticaMode = () => {
+  const handleToggleLogisticaMode = async () => {
     const nextState = !modoLogistica.deshabilitado;
-    setModoLogistica({ deshabilitado: nextState, estadoServicio: nextState ? 'DESHABILITADO' : 'HABILITADO' });
+    const res = toggleModoLogistica(nextState);
+    setModoLogistica(res);
     setOpsBannerMsg(
       nextState
         ? 'Generador de Guias LogiExpress DESHABILITADO: Despachos retenidos en cola de asignacion.'
         : 'Generador de Guias LogiExpress HABILITADO: Asignacion automatica de guias LEX-GT activa.'
     );
+    await fetchMetrics();
   };
 
-  const handleToggleNotificacionesMode = () => {
+  const handleToggleNotificacionesMode = async () => {
     const nextState = !modoNotificaciones.deshabilitado;
-    setModoNotificaciones({ deshabilitado: nextState, estadoServicio: nextState ? 'DESHABILITADO' : 'HABILITADO' });
+    const res = toggleModoNotificaciones(nextState);
+    setModoNotificaciones(res);
     setOpsBannerMsg(
       nextState
         ? 'Canal de Notificaciones SSE DESHABILITADO: Modo silencioso de eventos activado.'
         : 'Canal de Notificaciones SSE HABILITADO: Streaming reactivo Server-Sent Events en linea.'
     );
+    await fetchMetrics();
   };
 
   const handleReprocesarDlq = async () => {
+    setReprocesandoDlq(true);
     try {
       const res = await reprocesarPagosContingencia();
-      setOpsBannerMsg(`Cola DLQ reprocesada exitosamente: ${res.reprocesados || 0} pagos recuperados y enviados a facturación SAT.`);
+      if (metrics?.ultimasOrdenes) {
+        const conList = metrics.ultimasOrdenes.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA');
+        for (const o of conList) {
+          try {
+            await updateEstadoOrden(o.id, 'EN_PREPARACION');
+          } catch (e) {}
+        }
+      }
+      setOpsBannerMsg(`Cola DLQ reprocesada exitosamente: ${res.reprocesados || 0} pagos recuperados y conciliados en el sistema.`);
       await fetchMetrics();
     } catch (err) {
       setOpsBannerMsg(`Error al reprocesar DLQ: ${err.message}`);
+    } finally {
+      setReprocesandoDlq(false);
     }
   };
 
@@ -363,6 +422,7 @@ export const DashboardPage = () => {
               {activeTab === 'inventario' && 'Inventario Unificado (32 Tiendas + 2 CD)'}
               {activeTab === 'pedidos' && 'Gestión de Pedidos Omnicanal'}
               {activeTab === 'clientes' && 'Directorio de Clientes Omnicanal'}
+              {activeTab === 'soporte' && 'Centro de Atención y Soporte de Incidencias'}
               {activeTab === 'config' && 'Configuración de Parámetros SGO-Logic'}
             </h1>
             <p className="header-subtitle">Monitoreo y control centralizado MegaStore 2026.</p>
@@ -419,6 +479,30 @@ export const DashboardPage = () => {
             {/* TAB 1: PANEL DE CONTROL */}
             {activeTab === 'dashboard' && (
               <div className="dashboard-body-grid">
+                {metrics?.ordenesOffline && (
+                  <div
+                    className="glass-panel"
+                    style={{
+                      marginBottom: '1rem',
+                      padding: '1rem 1.25rem',
+                      borderLeft: '4px solid #ef4444',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#f87171',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem'
+                    }}
+                  >
+                    <AlertTriangle size={22} style={{ color: '#ef4444', flexShrink: 0 }} />
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '0.95rem' }}>Aviso de Operación: Servicio de Órdenes Fuera de Línea</strong>
+                      <span style={{ fontSize: '0.85rem', color: '#fca5a5' }}>
+                        No se pudo establecer conexión con el servicio principal de órdenes. Los datos en vivo y transacciones no están disponibles en este momento.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Bento Metrics Cards Grid */}
                 <section className="bento-metrics-grid">
                   <div className="metric-card glass-panel">
@@ -444,14 +528,20 @@ export const DashboardPage = () => {
                     </div>
                   </div>
 
-                  <div className="metric-card glass-panel border-alert">
+                  <div 
+                    className="metric-card glass-panel border-alert"
+                    onClick={() => setShowAlertasModal(true)}
+                    style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    title="Haga clic para auditar alertas, revisar microservicios y ver logs"
+                  >
                     <div className="metric-header text-error">
                       <span>Alertas de Servicio</span>
                       <AlertTriangle size={20} />
                     </div>
                     <div className="metric-value text-error">{metrics?.alertasActivas}</div>
-                    <div className="metric-footer text-error">
+                    <div className="metric-footer text-error" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>{metrics?.alertasActivas > 0 ? 'Contingencia o cola DLQ activa' : 'Todos los servicios estables'}</span>
+                      <span style={{ fontSize: '0.72rem', textDecoration: 'underline', color: 'var(--text-muted)' }}>Auditar</span>
                     </div>
                   </div>
 
@@ -681,7 +771,8 @@ export const DashboardPage = () => {
                     </thead>
                     <tbody>
                       {filteredOrders.map((ord) => {
-                        const esEstadoFinal = ord.estado === 'ENTREGADA' || ord.estado === 'CANCELADA';
+                        const esEstadoFinal = ord.estado === 'ENTREGADA' || ord.estado === 'CANCELADA' || ord.estado === 'INVENTARIO_INSUFICIENTE';
+                        const tieneFactura = ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA', 'PAGADA'].includes(ord.estado);
                         return (
                           <tr key={ord.id}>
                             <td className="font-mono text-orange">{ord.id}</td>
@@ -713,7 +804,7 @@ export const DashboardPage = () => {
                                     opacity: esEstadoFinal ? 0.55 : 1,
                                     cursor: esEstadoFinal ? 'not-allowed' : 'pointer'
                                   }}
-                                  title="Actualizar estado operativo"
+                                  title={esEstadoFinal ? 'Estado terminal no modificable' : 'Actualizar estado operativo'}
                                 >
                                   <option value="CREADA">Cambiar: Creada</option>
                                   <option value="PAGO_EN_CONTINGENCIA">Cambiar: Contingencia DLQ</option>
@@ -732,16 +823,22 @@ export const DashboardPage = () => {
                                 <Link to={`/seguimiento/${ord.id}`} className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
                                   Ver Tracking
                                 </Link>
-                                <a
-                                  href={`${FACTURACION_API}/orden/${ord.id}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="btn-secondary btn-sm"
-                                  style={{ textDecoration: 'none', color: 'var(--orange-primary)' }}
-                                  title="Descargar comprobante fiscal SAT FEL XML"
-                                >
-                                  Factura XML
-                                </a>
+                                {tieneFactura ? (
+                                  <a
+                                    href={`${FACTURACION_API}/orden/${ord.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="btn-secondary btn-sm"
+                                    style={{ textDecoration: 'none', color: 'var(--orange-primary)' }}
+                                    title="Descargar comprobante fiscal SAT FEL XML"
+                                  >
+                                    Factura XML
+                                  </a>
+                                ) : (
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', padding: '4px 6px' }}>
+                                    Sin SAT
+                                  </span>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -822,7 +919,14 @@ export const DashboardPage = () => {
                     <h2>Gestión de Incidencias de Clientes</h2>
                     <p>Reportes de problemas, cambios y solicitudes desde la vista de seguimiento del cliente.</p>
                   </div>
-                  <span className="badge badge-warning">{incidencias.length} Registradas</span>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {msgRespuestaExito && (
+                      <span className="badge badge-success" style={{ animation: 'fadeIn 0.3s ease' }}>
+                        {msgRespuestaExito}
+                      </span>
+                    )}
+                    <span className="badge badge-warning">{incidencias.length} Registradas</span>
+                  </div>
                 </div>
 
                 <div className="table-responsive">
@@ -832,14 +936,16 @@ export const DashboardPage = () => {
                         <th>ID Ticket</th>
                         <th>Orden Asociada</th>
                         <th>Fecha</th>
-                        <th>Tipo de Incidencia</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
                         <th>Detalle del Cliente</th>
+                        <th>Respuesta Operador</th>
                         <th>Acción</th>
                       </tr>
                     </thead>
                     <tbody>
                       {incidencias.length === 0 ? (
-                        <tr><td colSpan="6" style={{textAlign: 'center', padding: '2rem'}}>No hay incidencias reportadas.</td></tr>
+                        <tr><td colSpan="8" style={{textAlign: 'center', padding: '2rem'}}>No hay incidencias reportadas.</td></tr>
                       ) : (
                         incidencias.map((inc) => (
                           <tr key={inc.id}>
@@ -851,18 +957,47 @@ export const DashboardPage = () => {
                                 {inc.tipoEvento?.replace('INCIDENCIA_', '').toUpperCase()}
                               </span>
                             </td>
-                            <td style={{maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={inc.detalle}>{inc.detalle}</td>
                             <td>
-                              <button 
-                                onClick={() => {
-                                  setOrderSearch(inc.ordenId);
-                                  setOrderStatusFilter('TODOS');
-                                  setActiveTab('pedidos');
-                                }} 
-                                className="btn-secondary btn-sm"
-                              >
-                                Ver en Pedidos
-                              </button>
+                              <span className={`badge ${inc.estado === 'ATENDIDA' || inc.respuesta ? 'badge-success' : 'badge-warning'}`}>
+                                {inc.estado === 'ATENDIDA' || inc.respuesta ? 'ATENDIDA' : 'PENDIENTE'}
+                              </span>
+                            </td>
+                            <td style={{maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={inc.detalle}>
+                              {inc.detalle}
+                            </td>
+                            <td style={{maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}} title={inc.respuesta || 'Sin respuesta aún'}>
+                              {inc.respuesta ? (
+                                <span style={{ color: '#10b981', fontSize: '0.85rem' }}>{inc.respuesta}</span>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', fontStyle: 'italic' }}>Sin respuesta</span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                <button 
+                                  onClick={() => {
+                                    setTicketEnRespuesta(inc);
+                                    setTextoRespuesta(inc.respuesta || '');
+                                  }}
+                                  className="btn-primary btn-sm"
+                                  title="Responder o actualizar respuesta al cliente"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.3rem 0.6rem' }}
+                                >
+                                  <MessageSquare size={13} />
+                                  {inc.respuesta ? 'Editar' : 'Responder'}
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setOrderSearch(inc.ordenId);
+                                    setOrderStatusFilter('TODOS');
+                                    setActiveTab('pedidos');
+                                  }} 
+                                  className="btn-secondary btn-sm"
+                                  style={{ padding: '0.3rem 0.6rem' }}
+                                >
+                                  Ver Pedido
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -886,7 +1021,7 @@ export const DashboardPage = () => {
                 <div className="config-grid">
                   {/* SERVICIO 1: PAGOS Y PAYKLIK */}
                   <div className="config-card">
-                    <h4>1. Pasarela de Pagos PayKlik (pagos-service:8083)</h4>
+                    <h4>1. Pasarela de Pagos PayKlik</h4>
                     <p>Control del servicio externo de cobro. Al deshabilitarse, los pagos con tarjeta activan el Circuit Breaker y se encolan en la DLQ de RabbitMQ.</p>
                     <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Estado del servicio:</span>
@@ -898,27 +1033,28 @@ export const DashboardPage = () => {
                       <button
                         type="button"
                         onClick={handleTogglePayklikMode}
+                        disabled={togglingPayklik}
                         className={modoPayklik.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
                         style={!modoPayklik.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
                       >
-                        {modoPayklik.deshabilitado ? 'Habilitar Pasarela PayKlik' : 'Deshabilitar Pasarela PayKlik'}
+                        {togglingPayklik ? 'Actualizando pasarela...' : (modoPayklik.deshabilitado ? 'Habilitar Pasarela PayKlik' : 'Deshabilitar Pasarela PayKlik')}
                       </button>
 
                       <button
                         type="button"
                         onClick={handleReprocesarDlq}
                         className="btn-secondary btn-sm"
-                        disabled={pagosContingencia.length === 0}
+                        disabled={reprocesandoDlq || pagosContingencia.length === 0}
                         style={{ borderColor: '#10b981', color: '#34d399' }}
                       >
-                        Drenar y Reprocesar DLQ ({pagosContingencia.length})
+                        {reprocesandoDlq ? 'Drenando cola...' : `Drenar y Reprocesar DLQ (${pagosContingencia.length})`}
                       </button>
                     </div>
                   </div>
 
                   {/* SERVICIO 2: FACTURACIÓN FEL Y AS/400 */}
                   <div className="config-card">
-                    <h4>2. Certificador SAT FEL & AS/400 (facturacion-service:8084)</h4>
+                    <h4>2. Certificador SAT FEL & AS/400</h4>
                     <p>Emision de facturas electronicas DTE y enlace contable con el ERP legado IBM iSeries AS/400.</p>
                     <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Estado del certificador:</span>
@@ -930,10 +1066,11 @@ export const DashboardPage = () => {
                       <button
                         type="button"
                         onClick={handleToggleSatMode}
+                        disabled={togglingSat}
                         className={modoSat.deshabilitado ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
                         style={!modoSat.deshabilitado ? { borderColor: '#ef4444', color: '#f87171' } : {}}
                       >
-                        {modoSat.deshabilitado ? 'Habilitar Facturacion SAT' : 'Deshabilitar Facturacion SAT'}
+                        {togglingSat ? 'Actualizando certificador...' : (modoSat.deshabilitado ? 'Habilitar Facturacion SAT' : 'Deshabilitar Facturacion SAT')}
                       </button>
 
                       <a
@@ -952,7 +1089,7 @@ export const DashboardPage = () => {
 
                   {/* SERVICIO 3: INVENTARIO */}
                   <div className="config-card">
-                    <h4>3. Servicio Central de Inventario (inventario-service:8082)</h4>
+                    <h4>3. Servicio Central de Inventario</h4>
                     <p>Gestion de stock omnicanal (CD Norte, CD Sur y tiendas POS) con bloqueo optimista de 15 minutos.</p>
                     <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Reserva en tiempo real:</span>
@@ -974,7 +1111,7 @@ export const DashboardPage = () => {
 
                   {/* SERVICIO 4: LOGÍSTICA */}
                   <div className="config-card">
-                    <h4>4. Servicio Courier LogiExpress (logistica-service:8085)</h4>
+                    <h4>4. Servicio Courier LogiExpress</h4>
                     <p>Despacho inteligente y emision automatica de codigos de rastreo LEX-GT para entregas y pickup.</p>
                     <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Generador de guias:</span>
@@ -996,7 +1133,7 @@ export const DashboardPage = () => {
 
                   {/* SERVICIO 5: NOTIFICACIONES REACTIVAS SSE */}
                   <div className="config-card">
-                    <h4>5. Notificaciones Push SSE (notificaciones-service:8086)</h4>
+                    <h4>5. Notificaciones Push y WebSockets</h4>
                     <p>Bus reactivo de eventos hacia clientes Web/Mobile via Server-Sent Events y WebSockets (.NET 8).</p>
                     <div style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Canal de difusion:</span>
@@ -1018,7 +1155,360 @@ export const DashboardPage = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
 
+        {/* MODAL DE AUDITORÍA OPERATIVA Y ALERTAS DEL SISTEMA */}
+        {showAlertasModal && (
+          <div className="modal-backdrop animate-fade-in" onClick={() => setShowAlertasModal(false)}>
+            <div 
+              className="profile-modal-card glass-panel" 
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '850px', width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+            >
+              <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-medium)', paddingBottom: '1rem' }}>
+                <div className="modal-title-group">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <AlertTriangle size={24} style={{ color: metrics?.alertasActivas > 0 ? '#ef4444' : '#10b981' }} />
+                    <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Centro de Auditoría Operativa y Alertas del Sistema</h2>
+                  </div>
+                  <p className="modal-subtitle" style={{ margin: '0.25rem 0 0 0' }}>
+                    Diagnóstico de resiliencia, monitoreo de microservicios y estado de colas RabbitMQ / DLQ
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowAlertasModal(false)}
+                  className="btn-secondary btn-sm"
+                  style={{ padding: '0.35rem 0.65rem' }}
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              {/* Resumen Bento de Estado */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', margin: '1.25rem 0' }}>
+                <div className="glass-panel" style={{ padding: '0.85rem', borderLeft: '4px solid #ef4444' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Alertas Totales</span>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: metrics?.alertasActivas > 0 ? '#ef4444' : '#10b981' }}>
+                    {metrics?.alertasActivas}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {metrics?.alertasActivas === 0 ? 'Sin incidencias activas' : 'Requiere atención operativa'}
+                  </span>
+                </div>
+
+                <div className="glass-panel" style={{ padding: '0.85rem', borderLeft: '4px solid #f59e0b' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Órdenes en Contingencia</span>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f59e0b' }}>
+                    {metrics?.ultimasOrdenes?.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length || pagosContingencia.length}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Retenidas en RabbitMQ DLQ</span>
+                </div>
+
+                <div className="glass-panel" style={{ padding: '0.85rem', borderLeft: '4px solid #3b82f6' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Pasarela PayKlik</span>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 600, color: modoPayklik.deshabilitado ? '#ef4444' : '#10b981' }}>
+                    {modoPayklik.deshabilitado ? 'Deshabilitada' : 'Operativa'}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {modoPayklik.deshabilitado ? 'Circuit Breaker Activo' : 'En línea (Normal)'}
+                  </span>
+                </div>
+
+                <div className="glass-panel" style={{ padding: '0.85rem', borderLeft: '4px solid #10b981' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Servicios Conectados</span>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#10b981' }}>
+                    {metrics?.sistemas?.filter(s => s.statusType !== 'error').length || 6} / {metrics?.sistemas?.length || 6}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Microservicios SGO-Logic</span>
+                </div>
+              </div>
+
+              {/* Botones de acción directa */}
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                <button
+                  type="button"
+                  onClick={handleReprocesarDlq}
+                  disabled={reprocesandoDlq || ((metrics?.ultimasOrdenes?.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length || 0) === 0 && pagosContingencia.length === 0)}
+                  className="btn-primary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#10b981', borderColor: '#10b981' }}
+                >
+                  <RefreshCw size={14} className={reprocesandoDlq ? 'spin-slow' : ''} />
+                  <span>{reprocesandoDlq ? 'Drenando cola DLQ...' : 'Drenar y Reprocesar Contingencias DLQ'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderStatusFilter('PAGO_EN_CONTINGENCIA');
+                    setActiveTab('pedidos');
+                    setShowAlertasModal(false);
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Ver en Gestión de Pedidos
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('config');
+                    setShowAlertasModal(false);
+                  }}
+                  className="btn-secondary btn-sm"
+                >
+                  Ir a Configuración de Resiliencia
+                </button>
+              </div>
+
+              {/* Tabs internos */}
+              <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border-medium)', marginBottom: '1rem' }}>
+                <button
+                  className={`btn-sm ${alertasTab === 'contingencia' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setAlertasTab('contingencia')}
+                  style={{ borderRadius: '6px 6px 0 0', borderBottom: 'none' }}
+                >
+                  Cola de Contingencia DLQ ({metrics?.ultimasOrdenes?.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length || pagosContingencia.length})
+                </button>
+                <button
+                  className={`btn-sm ${alertasTab === 'servicios' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setAlertasTab('servicios')}
+                  style={{ borderRadius: '6px 6px 0 0', borderBottom: 'none' }}
+                >
+                  Salud de Microservicios ({metrics?.sistemas?.length || 6})
+                </button>
+                <button
+                  className={`btn-sm ${alertasTab === 'logs' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setAlertasTab('logs')}
+                  style={{ borderRadius: '6px 6px 0 0', borderBottom: 'none' }}
+                >
+                  Logs y Auditoría del Sistema
+                </button>
+              </div>
+
+              {/* Contenido Tab 1: Órdenes en contingencia */}
+              {alertasTab === 'contingencia' && (
+                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                  {(metrics?.ultimasOrdenes?.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length === 0 && pagosContingencia.length === 0) ? (
+                    <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                      <CheckCircle2 size={36} style={{ color: '#10b981', marginBottom: '0.5rem' }} />
+                      <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-main)' }}>No hay órdenes retenidas en contingencia DLQ.</p>
+                      <span style={{ fontSize: '0.85rem' }}>Todas las transacciones se encuentran conciliadas o en ruta logística nominal.</span>
+                    </div>
+                  ) : (
+                    <table className="ops-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr>
+                          <th>ID Orden</th>
+                          <th>Cliente</th>
+                          <th>Total</th>
+                          <th>Canal</th>
+                          <th>Motivo / Diagnóstico</th>
+                          <th>Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(metrics?.ultimasOrdenes?.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA') || []).map((ord) => (
+                          <tr key={ord.id}>
+                            <td className="font-mono text-orange">{ord.id}</td>
+                            <td>{ord.cliente}</td>
+                            <td className="font-mono">${Number(ord.total).toFixed(2)}</td>
+                            <td>{ord.canal}</td>
+                            <td>
+                              <span className="badge badge-warning" style={{ fontSize: '0.72rem' }}>
+                                PayKlik Fallo Simulado / DLQ
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                onClick={() => {
+                                  setOrderSearch(ord.id);
+                                  setOrderStatusFilter('TODOS');
+                                  setActiveTab('pedidos');
+                                  setShowAlertasModal(false);
+                                }}
+                                className="btn-secondary btn-sm"
+                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                              >
+                                Inspeccionar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {/* Contenido Tab 2: Salud de Microservicios */}
+              {alertasTab === 'servicios' && (
+                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                  <table className="ops-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr>
+                        <th>Microservicio</th>
+                        <th>Estado Operativo</th>
+                        <th>Latencia</th>
+                        <th>Diagnóstico SGO-Logic</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metrics?.sistemas?.map((sis, idx) => (
+                        <tr key={idx}>
+                          <td style={{ fontWeight: 600 }}>{sis.nombre}</td>
+                          <td>
+                            <span className={`badge ${sis.statusType === 'error' ? 'badge-error' : 'badge-success'}`}>
+                              {sis.estado}
+                            </span>
+                          </td>
+                          <td className="font-mono">{sis.latencia}</td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                            {sis.statusType === 'error'
+                              ? 'Servicio no responde o se encuentra deshabilitado para simulación de contingencia'
+                              : 'Operación nominal verificada mediante health check HTTP'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Contenido Tab 3: Logs y Auditoría del Sistema */}
+              {alertasTab === 'logs' && (
+                <div style={{ maxHeight: '350px', overflowY: 'auto', background: '#0a0d14', padding: '1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                  <div style={{ marginBottom: '0.5rem', color: '#10b981', borderBottom: '1px solid #1e293b', paddingBottom: '0.4rem' }}>
+                    --- LOGS DE EVENTOS Y RESILIENCIA SGO-LOGIC 2026 ---
+                  </div>
+                  {incidencias && incidencias.length > 0 ? (
+                    incidencias.map((inc) => (
+                      <div key={inc.id} style={{ marginBottom: '0.4rem', color: '#cbd5e1' }}>
+                        <span style={{ color: '#94a3b8' }}>[{new Date(inc.fecha).toLocaleTimeString()}]</span>{' '}
+                        <span style={{ color: '#f59e0b', fontWeight: 600 }}>[{inc.tipoEvento}]</span>{' '}
+                        <span style={{ color: '#38bdf8' }}>Orden #{inc.ordenId}</span>: {inc.detalle}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: '#94a3b8' }}>No se han registrado incidentes de soporte adicionales.</div>
+                  )}
+                  {metrics?.sistemas?.map((sis, idx) => (
+                    <div key={`sis-${idx}`} style={{ marginTop: '0.25rem', color: sis.statusType === 'error' ? '#f87171' : '#64748b' }}>
+                      <span>[HEALTH]</span> {sis.nombre}: {sis.estado} (latencia: {sis.latencia})
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE RESPUESTA A INCIDENCIA DE CLIENTE */}
+        {ticketEnRespuesta && (
+          <div className="modal-backdrop animate-fade-in" onClick={() => setTicketEnRespuesta(null)}>
+            <div 
+              className="profile-modal-card glass-panel" 
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '650px', width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+            >
+              <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-medium)', paddingBottom: '1rem' }}>
+                <div className="modal-title-group">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <MessageSquare size={22} style={{ color: 'var(--accent-orange)' }} />
+                    <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Responder Incidencia TCK-{ticketEnRespuesta.id}</h2>
+                  </div>
+                  <p className="modal-subtitle" style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem' }}>
+                    Orden: <strong className="font-mono text-orange">{ticketEnRespuesta.ordenId}</strong> | Tipo: <strong>{ticketEnRespuesta.tipoEvento?.replace('INCIDENCIA_', '').toUpperCase()}</strong>
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setTicketEnRespuesta(null)}
+                  className="btn-secondary btn-sm"
+                  style={{ padding: '0.35rem 0.65rem' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ margin: '1rem 0' }}>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '0.85rem', marginBottom: '1rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Consulta / Reclamo del Cliente:</span>
+                  <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.92rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                    {ticketEnRespuesta.detalle}
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>
+                    Plantillas de Respuesta Rápida:
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    {[
+                      'Tu solicitud ha sido recibida y nuestro equipo de logística está agilizando la entrega.',
+                      'Hemos verificado tu pago y el comprobante ha sido actualizado en el sistema.',
+                      'Tu reporte de garantía/devolución fue aprobado. Un agente se comunicará para la recolección.',
+                      'El incidente ha sido resuelto satisfactoriamente. Tu orden continúa su curso normal.',
+                      'Estamos gestionando la actualización de stock para procesar tu despacho de inmediato.'
+                    ].map((plantilla, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setTextoRespuesta(plantilla)}
+                        className="btn-secondary btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', textAlign: 'left', borderRadius: '6px' }}
+                      >
+                        {plantilla.substring(0, 48)}...
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <form onSubmit={handleEnviarRespuestaTicket}>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>
+                      Respuesta al Cliente:
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={textoRespuesta}
+                      onChange={(e) => setTextoRespuesta(e.target.value)}
+                      placeholder="Escribe la respuesta que verá el cliente en su portal de seguimiento..."
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: '8px',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.9rem',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setTicketEnRespuesta(null)}
+                      className="btn-secondary"
+                      style={{ padding: '0.5rem 1rem' }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={enviandoRespuesta || !textoRespuesta.trim()}
+                      className="btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1.25rem' }}
+                    >
+                      <Send size={15} />
+                      {enviandoRespuesta ? 'Enviando...' : 'Enviar Respuesta'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         )}
       </main>
