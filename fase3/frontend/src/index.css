@@ -59,6 +59,10 @@
   padding: 0;
 }
 
+html {
+  box-sizing: border-box;
+}
+
 body {
   font-family: var(--font-family);
   background-color: var(--bg-main);
@@ -67,7 +71,12 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 a {
@@ -262,6 +271,19 @@ input, select, textarea {
   max-width: 1320px;
   margin: 0 auto;
   padding: 2rem 1.5rem;
+}
+
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+  }
+  .app-container {
+    width: 100%;
+    overflow-x: hidden;
+  }
+  .main-content {
+    padding: 1rem 0.75rem;
+  }
 }
 
 /* Page Animations */

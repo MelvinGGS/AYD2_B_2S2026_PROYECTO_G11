@@ -6,6 +6,12 @@ Sistema de Gestion de Ordenes y Logistica Omnicanal (SGO-Logic) con campana come
 **Facultad:** Facultad de Ingenieria, Escuela de Ciencias y Sistemas  
 **Curso:** Analisis y Diseno de Sistemas 2, Seccion B (Segundo Semestre 2026)  
 
+### Despliegue Oficial en Produccion Cloud (Google Cloud Platform)
+
+- **Tienda Web Omnicanal (En Vivo HTTPS / SSL):** [https://megastore-gt.duckdns.org](https://megastore-gt.duckdns.org)
+- **Dominio Alternativo (Wildcard DNS):** [http://megastore.35.239.248.226.sslip.io](http://megastore.35.239.248.226.sslip.io)
+- **Consola de Eventos RabbitMQ:** [http://megastore-gt.duckdns.org:15672](http://megastore-gt.duckdns.org:15672) (Usuario: guest / Password: guest)
+
 ---
 
 ## 1. Integrantes del Equipo y Roles

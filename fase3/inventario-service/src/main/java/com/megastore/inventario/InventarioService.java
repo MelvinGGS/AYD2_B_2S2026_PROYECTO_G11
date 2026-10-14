@@ -218,7 +218,10 @@ public class InventarioService {
         if (evento == null || !evento.containsKey("ordenId")) return;
         String ordenId = (String) evento.get("ordenId");
         System.out.println("[INVENTARIO] Procesando liberacion de stock por orden cancelada: " + ordenId);
-        List<Reserva> reservas = reservaRepository.findByOrdenId(ordenId);
+        List<Reserva> reservas = reservaRepository.findByOrdenIdAndActivaTrue(ordenId);
+        if (reservas == null || reservas.isEmpty()) {
+            reservas = reservaRepository.findByOrdenId(ordenId);
+        }
         for (Reserva r : reservas) {
             if (!r.isLiberada()) {
                 r.setActiva(false);

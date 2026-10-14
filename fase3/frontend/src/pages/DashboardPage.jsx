@@ -414,6 +414,58 @@ export const DashboardPage = () => {
 
       {/* Main Dashboard Content */}
       <main className="dashboard-main animate-fade-in">
+        {/* Mobile Navigation Tabs */}
+        <div className="dashboard-mobile-tabs">
+          <button
+            type="button"
+            className={`mobile-tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            <LayoutDashboard size={15} />
+            <span>Resumen</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-tab-btn ${activeTab === 'inventario' ? 'active' : ''}`}
+            onClick={() => setActiveTab('inventario')}
+          >
+            <Package size={15} />
+            <span>Inventario</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-tab-btn ${activeTab === 'pedidos' ? 'active' : ''}`}
+            onClick={() => setActiveTab('pedidos')}
+          >
+            <ShoppingBag size={15} />
+            <span>Pedidos</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-tab-btn ${activeTab === 'clientes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('clientes')}
+          >
+            <Users size={15} />
+            <span>Clientes</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-tab-btn ${activeTab === 'soporte' ? 'active' : ''}`}
+            onClick={() => setActiveTab('soporte')}
+          >
+            <LifeBuoy size={15} />
+            <span>Soporte</span>
+          </button>
+          <button
+            type="button"
+            className={`mobile-tab-btn ${activeTab === 'config' ? 'active' : ''}`}
+            onClick={() => setActiveTab('config')}
+          >
+            <Settings size={15} />
+            <span>Config</span>
+          </button>
+        </div>
+
         {/* Header Bar */}
         <header className="dashboard-header">
           <div>
@@ -728,8 +780,7 @@ export const DashboardPage = () => {
                   </div>
 
                   <select
-                    className="form-input"
-                    style={{ width: '200px' }}
+                    className="form-input filter-select-status"
                     value={orderStatusFilter}
                     onChange={(e) => setOrderStatusFilter(e.target.value)}
                   >
@@ -744,8 +795,7 @@ export const DashboardPage = () => {
                   </select>
 
                   <select
-                    className="form-input"
-                    style={{ width: '210px' }}
+                    className="form-input filter-select-payment"
                     value={orderPaymentFilter}
                     onChange={(e) => setOrderPaymentFilter(e.target.value)}
                   >
@@ -1288,7 +1338,7 @@ export const DashboardPage = () => {
 
               {/* Contenido Tab 1: Órdenes en contingencia */}
               {alertasTab === 'contingencia' && (
-                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                <div className="table-responsive" style={{ maxHeight: '350px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                   {(metrics?.ultimasOrdenes?.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length === 0 && pagosContingencia.length === 0) ? (
                     <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
                       <CheckCircle2 size={36} style={{ color: '#10b981', marginBottom: '0.5rem' }} />
@@ -1296,7 +1346,7 @@ export const DashboardPage = () => {
                       <span style={{ fontSize: '0.85rem' }}>Todas las transacciones se encuentran conciliadas o en ruta logística nominal.</span>
                     </div>
                   ) : (
-                    <table className="ops-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+                    <table className="ops-table" style={{ width: '100%', fontSize: '0.85rem', minWidth: '550px' }}>
                       <thead>
                         <tr>
                           <th>ID Orden</th>
@@ -1343,8 +1393,8 @@ export const DashboardPage = () => {
 
               {/* Contenido Tab 2: Salud de Microservicios */}
               {alertasTab === 'servicios' && (
-                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
-                  <table className="ops-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+                <div className="table-responsive" style={{ maxHeight: '350px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table className="ops-table" style={{ width: '100%', fontSize: '0.85rem', minWidth: '550px' }}>
                     <thead>
                       <tr>
                         <th>Microservicio</th>
