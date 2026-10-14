@@ -13,12 +13,16 @@ on:
       - develop
       - main
 
+# Cancela ejecuciones anteriores si haces un nuevo push rápido a la misma rama
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ETAPA 1: BUILD (Compilación y generación de artefactos)
   build:
     name: Build Frontend & Microservicios
     runs-on: ubuntu-latest
-
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v4
@@ -32,9 +36,9 @@ jobs:
           cache-dependency-path: fase3/frontend/package-lock.json
 
       - name: Compilar Frontend React SPA
+        working-directory: fase3/frontend
         run: |
-          cd fase3/frontend
-          npm install
+          npm ci --prefer-offline --no-audit
           npm run build
 
       # 2. Backends Java 17 Spring Boot
@@ -46,16 +50,13 @@ jobs:
           cache: 'maven'
           cache-dependency-path: 'fase3/**/pom.xml'
 
-      - name: Compilar Microservicios Java
+      - name: Compilar Microservicios Java en paralelo
         run: |
-          echo "Compilando Servicio de Órdenes..."
-          mvn -B clean compile -f fase3/ordenes-service/pom.xml
-          echo "Compilando Servicio de Inventario..."
-          mvn -B clean compile -f fase3/inventario-service/pom.xml
-          echo "Compilando Servicio de Pagos..."
-          mvn -B clean compile -f fase3/pagos-service/pom.xml
-          echo "Compilando Servicio de Facturación..."
-          mvn -B clean compile -f fase3/facturacion-service/pom.xml
+          mvn -B compile -f fase3/ordenes-service/pom.xml &
+          mvn -B compile -f fase3/inventario-service/pom.xml &
+          mvn -B compile -f fase3/pagos-service/pom.xml &
+          mvn -B compile -f fase3/facturacion-service/pom.xml &
+          wait
 
       # 3. Backends .NET 8
       - name: Configurar .NET SDK 8.0
@@ -63,56 +64,72 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Compilar Microservicios .NET 8
+      - name: Cachear paquetes NuGet (.NET)
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('fase3/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Compilar Microservicios .NET 8 en paralelo
         run: |
-          echo "Compilando Servicio de Logística..."
-          dotnet build fase3/logistica-service/logistica-service.csproj
-          echo "Compilando Servicio de Notificaciones..."
-          dotnet build fase3/notificaciones-service/notificaciones-service.csproj
+          dotnet build fase3/logistica-service/logistica-service.csproj --nologo &
+          dotnet build fase3/notificaciones-service/notificaciones-service.csproj --nologo &
+          wait
 
   # ETAPA 2: TEST (Pruebas automáticas - Compuerta de calidad)
   test:
     name: Automated Tests
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js 20
+      - name: Configurar Node.js 20 (con caché)
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: fase3/frontend/package-lock.json
 
       - name: Ejecutar Pruebas Unitarias Frontend (Checkout & BNPL)
+        working-directory: fase3/frontend
         run: |
-          cd fase3/frontend
-          npm install
+          npm ci --prefer-offline --no-audit
           npm test
 
-      - name: Configurar Java JDK 17
+      - name: Configurar Java JDK 17 (con caché)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'maven'
+          cache-dependency-path: 'fase3/**/pom.xml'
 
       - name: Ejecutar Pruebas Backend Java
         run: |
-          echo "Ejecutando pruebas de resiliencia y pagos..."
-          mvn -B test -f fase3/pagos-service/pom.xml
-          echo "Ejecutando pruebas unitarias de inventario y bloqueo optimista..."
-          mvn -B test -f fase3/inventario-service/pom.xml
+          mvn -B test -f fase3/pagos-service/pom.xml &
+          mvn -B test -f fase3/inventario-service/pom.xml &
+          wait
 
       - name: Configurar .NET SDK 8.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
+      - name: Recuperar caché NuGet (.NET)
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('fase3/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Ejecutar Pruebas de Integración Logística (.NET 8 xUnit)
         run: |
-          echo "Ejecutando 5 pruebas de integración de logística..."
-          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --logger "console;verbosity=normal"
+          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --nologo --logger "console;verbosity=normal"
 
   # ETAPA 3: DEPLOY (Despliegue automatizado)
   deploy:
@@ -120,32 +137,36 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
-      - name: Clonar repositorio
-        uses: actions/checkout@v4
-
       - name: Desplegar vía SSH
         if: env.SSH_HOST != ''
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" << 'EOF'
-            cd /home/${SSH_USER}/AYD2_B_2S2026_PROYECTO_G11
+            set -e
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            if [ -d "/opt/megastore" ]; then
+              cd /opt/megastore
+            else
+              cd /home/${USER}/AYD2_B_2S2026_PROYECTO_G11
+            fi
             git pull origin develop
             cd fase3
-            docker compose up -d --build
+            docker compose build frontend
+            docker compose up -d
+            echo "Despliegue completado exitosamente en Compute Engine."
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
           EOF
 
       - name: Verificación de estado del despliegue
         if: env.SSH_HOST == ''
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           echo "Deploy step skipped: SSH_HOST secret is not configured."
