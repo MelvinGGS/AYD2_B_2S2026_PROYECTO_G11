@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - 'release/**'
       - 'feature/**'
     tags:
       - 'v*'
@@ -13,12 +14,16 @@ on:
       - develop
       - main
 
+# Cancela ejecuciones anteriores si haces un nuevo push rápido a la misma rama
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ETAPA 1: BUILD (Compilación y generación de artefactos)
   build:
     name: Build Frontend & Microservicios
     runs-on: ubuntu-latest
-
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v4
@@ -32,9 +37,9 @@ jobs:
           cache-dependency-path: fase3/frontend/package-lock.json
 
       - name: Compilar Frontend React SPA
+        working-directory: fase3/frontend
         run: |
-          cd fase3/frontend
-          npm install
+          npm ci --prefer-offline --no-audit
           npm run build
 
       # 2. Backends Java 17 Spring Boot
@@ -46,16 +51,16 @@ jobs:
           cache: 'maven'
           cache-dependency-path: 'fase3/**/pom.xml'
 
-      - name: Compilar Microservicios Java
+      - name: Compilar Microservicios Java en paralelo
         run: |
-          echo "Compilando Servicio de Órdenes..."
-          mvn -B clean compile -f fase3/ordenes-service/pom.xml
-          echo "Compilando Servicio de Inventario..."
-          mvn -B clean compile -f fase3/inventario-service/pom.xml
-          echo "Compilando Servicio de Pagos..."
-          mvn -B clean compile -f fase3/pagos-service/pom.xml
-          echo "Compilando Servicio de Facturación..."
-          mvn -B clean compile -f fase3/facturacion-service/pom.xml
+          pids=()
+          mvn -B compile -f fase3/ordenes-service/pom.xml & pids+=($!)
+          mvn -B compile -f fase3/inventario-service/pom.xml & pids+=($!)
+          mvn -B compile -f fase3/pagos-service/pom.xml & pids+=($!)
+          mvn -B compile -f fase3/facturacion-service/pom.xml & pids+=($!)
+          for pid in "${pids[@]}"; do
+            wait "$pid"
+          done
 
       # 3. Backends .NET 8
       - name: Configurar .NET SDK 8.0
@@ -63,56 +68,91 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Compilar Microservicios .NET 8
+      - name: Cachear paquetes NuGet (.NET)
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('fase3/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Compilar Microservicios .NET 8 en paralelo
         run: |
-          echo "Compilando Servicio de Logística..."
-          dotnet build fase3/logistica-service/logistica-service.csproj
-          echo "Compilando Servicio de Notificaciones..."
-          dotnet build fase3/notificaciones-service/notificaciones-service.csproj
+          pids=()
+          dotnet build fase3/logistica-service/logistica-service.csproj --nologo & pids+=($!)
+          dotnet build fase3/notificaciones-service/notificaciones-service.csproj --nologo & pids+=($!)
+          for pid in "${pids[@]}"; do
+            wait "$pid"
+          done
 
   # ETAPA 2: TEST (Pruebas automáticas - Compuerta de calidad)
   test:
     name: Automated Tests
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js 20
+      # 1. Configuración de entornos y cachés
+      - name: Configurar Node.js 20 (con caché)
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: fase3/frontend/package-lock.json
 
-      - name: Ejecutar Pruebas Unitarias Frontend (Checkout & BNPL)
-        run: |
-          cd fase3/frontend
-          npm install
-          npm test
+      - name: Instalar dependencias Frontend
+        working-directory: fase3/frontend
+        run: npm ci --prefer-offline --no-audit
 
-      - name: Configurar Java JDK 17
+      - name: Configurar Java JDK 17 (con caché)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Ejecutar Pruebas Backend Java
-        run: |
-          echo "Ejecutando pruebas de resiliencia y pagos..."
-          mvn -B test -f fase3/pagos-service/pom.xml
-          echo "Ejecutando pruebas unitarias de inventario y bloqueo optimista..."
-          mvn -B test -f fase3/inventario-service/pom.xml
+          cache: 'maven'
+          cache-dependency-path: 'fase3/**/pom.xml'
 
       - name: Configurar .NET SDK 8.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Ejecutar Pruebas de Integración Logística (.NET 8 xUnit)
+      - name: Recuperar caché NuGet (.NET)
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('fase3/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # 2. Ejecución concurrente de suites de pruebas con control de PIDs
+      - name: Ejecutar Suites de Pruebas en Paralelo (Frontend, Java y .NET)
         run: |
-          echo "Ejecutando 5 pruebas de integración de logística..."
-          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --logger "console;verbosity=normal"
+          pids=()
+          echo "Iniciando pruebas unitarias Frontend (Checkout & BNPL)..."
+          (cd fase3/frontend && npm test) & pids+=($!)
+
+          echo "Iniciando pruebas backend Java (Pagos e Inventario)..."
+          mvn -B test -f fase3/pagos-service/pom.xml & pids+=($!)
+          mvn -B test -f fase3/inventario-service/pom.xml & pids+=($!)
+
+          echo "Iniciando pruebas de integracion backend .NET (Logistica xUnit)..."
+          dotnet test fase3/logistica-service.Tests/logistica-service.Tests.csproj --nologo --logger "console;verbosity=normal" & pids+=($!)
+
+          failed=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Error: Una o mas suites de pruebas fallaron."
+            exit 1
+          fi
+          echo "Todas las suites de pruebas finalizaron exitosamente."
 
   # ETAPA 3: DEPLOY (Despliegue automatizado)
   deploy:
@@ -120,32 +160,80 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
-      - name: Clonar repositorio
-        uses: actions/checkout@v4
-
       - name: Desplegar vía SSH
         if: env.SSH_HOST != ''
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" << 'EOF'
-            cd /home/${SSH_USER}/AYD2_B_2S2026_PROYECTO_G11
+            set -e
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            if [ -d "/opt/megastore" ]; then
+              cd /opt/megastore
+            else
+              cd /home/${USER}/AYD2_B_2S2026_PROYECTO_G11
+            fi
+
+            PREV_HEAD=$(git rev-parse HEAD)
             git pull origin develop
+            CURR_HEAD=$(git rev-parse HEAD)
             cd fase3
-            docker compose up -d --build
+
+            SERVICES=()
+            if [ "$PREV_HEAD" = "$CURR_HEAD" ]; then
+              echo "No se detectaron nuevos commits; verificando contenedores en ejecucion..."
+            else
+              CHANGED_FILES=$(git diff --name-only "$PREV_HEAD" "$CURR_HEAD")
+              echo "Archivos modificados detectados entre $PREV_HEAD y $CURR_HEAD:"
+              echo "$CHANGED_FILES"
+
+              if echo "$CHANGED_FILES" | grep -q '^fase3/frontend/'; then
+                SERVICES+=("frontend")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/ordenes-service/'; then
+                SERVICES+=("ordenes-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/inventario-service/'; then
+                SERVICES+=("inventario-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/pagos-service/'; then
+                SERVICES+=("pagos-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/facturacion-service/'; then
+                SERVICES+=("facturacion-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/logistica-service/'; then
+                SERVICES+=("logistica-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/notificaciones-service/'; then
+                SERVICES+=("notificaciones-service")
+              fi
+              if echo "$CHANGED_FILES" | grep -q '^fase3/docker-compose.yml'; then
+                SERVICES=("frontend" "ordenes-service" "inventario-service" "pagos-service" "facturacion-service" "logistica-service" "notificaciones-service")
+              fi
+            fi
+
+            if [ ${#SERVICES[@]} -gt 0 ]; then
+              echo "Reconstruyendo y levantando servicios modificados: ${SERVICES[*]}"
+              docker compose up -d --build "${SERVICES[@]}"
+            else
+              echo "Levantando servicios sin reconstruccion de imagenes..."
+              docker compose up -d
+            fi
+
+            echo "Despliegue completado exitosamente en Compute Engine."
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
           EOF
 
       - name: Verificación de estado del despliegue
         if: env.SSH_HOST == ''
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
         run: |
           echo "Deploy step skipped: SSH_HOST secret is not configured."

@@ -17,7 +17,7 @@ export const CartItem = ({ item }) => {
         <h4 className="cart-item-title">{item.nombre}</h4>
         <p className="cart-item-desc">{item.descripcion}</p>
         <span className="badge badge-orange cart-item-stock">
-          {item.stockStatus || 'En stock'}
+          {item.stockStatus || 'En stock'} {item.maxStock ? `(Máx: ${item.maxStock} uds)` : ''}
         </span>
       </div>
 
@@ -42,7 +42,8 @@ export const CartItem = ({ item }) => {
           <button
             className="qty-btn"
             onClick={() => updateQuantity(item.id, item.cantidad + 1)}
-            title="Aumentar cantidad"
+            disabled={item.maxStock && item.cantidad >= item.maxStock}
+            title={item.maxStock && item.cantidad >= item.maxStock ? `Stock máximo disponible (${item.maxStock})` : 'Aumentar cantidad'}
           >
             <Plus size={14} />
           </button>

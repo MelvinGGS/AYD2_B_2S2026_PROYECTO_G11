@@ -19,24 +19,57 @@ import javax.crypto.spec.SecretKeySpec;
 public class AuthController {
 
     private final ClienteRepository clienteRepository;
+    private final OrdenRepository ordenRepository;
+    private final CreditoService creditoService;
 
-    public AuthController(ClienteRepository clienteRepository) {
+    public AuthController(ClienteRepository clienteRepository,
+                          OrdenRepository ordenRepository,
+                          CreditoService creditoService) {
         this.clienteRepository = clienteRepository;
+        this.ordenRepository = ordenRepository;
+        this.creditoService = creditoService;
     }
 
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> listarClientes() {
         List<Cliente> clientes = clienteRepository.findAll();
         List<Map<String, Object>> response = clientes.stream().map(c -> {
+            String cid = String.valueOf(c.getId());
+            List<Orden> ordenesCli = ordenRepository.findByClienteId(cid);
+            long totalOrdenes = ordenesCli.stream()
+                    .filter(o -> !"CANCELADA".equalsIgnoreCase(o.getEstado()))
+                    .count();
+            java.math.BigDecimal gasto = ordenesCli.stream()
+                    .filter(o -> !"CANCELADA".equalsIgnoreCase(o.getEstado()))
+                    .map(o -> o.getTotal() != null ? o.getTotal() : java.math.BigDecimal.ZERO)
+                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+
+            Map<String, Object> eval = creditoService.evaluarCredito(cid, java.math.BigDecimal.ZERO);
+            int score = eval.get("score") instanceof Number ? ((Number) eval.get("score")).intValue() : 85;
+            boolean aptoBnpl = Boolean.TRUE.equals(eval.get("aprobado"));
+
+            String clasificacion = "ADMIN".equalsIgnoreCase(c.getRol())
+                    ? "Admin Ops"
+                    : (!aptoBnpl || score < 70
+                        ? "Riesgo Crediticio"
+                        : (gasto.compareTo(new java.math.BigDecimal("500.00")) >= 0 ? "VIP" : "Activo"));
+
             Map<String, Object> map = new HashMap<>();
             map.put("id", "CLI-" + c.getId());
+            map.put("clienteId", cid);
             map.put("nombre", c.getNombre());
             map.put("email", c.getEmail());
             map.put("canal", c.getCanalPreferido() != null ? c.getCanalPreferido() : "Web Store");
             map.put("rol", c.getRol());
             map.put("telefono", c.getTelefono() != null ? c.getTelefono() : "");
             map.put("direccion", c.getDireccion() != null ? c.getDireccion() : "");
-            map.put("estado", "Activo");
+            map.put("ordenes", totalOrdenes);
+            map.put("totalGasto", gasto.doubleValue());
+            map.put("score", score);
+            map.put("aptoBnpl", aptoBnpl);
+            map.put("saldoDeudor", eval.get("saldoDeudor"));
+            map.put("saldoDisponible", eval.get("saldoDisponible"));
+            map.put("estado", clasificacion);
             return map;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(response);

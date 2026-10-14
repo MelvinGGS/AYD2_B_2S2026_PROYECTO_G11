@@ -18,10 +18,16 @@ public class EventoAuditoria {
     @Column(columnDefinition = "TEXT")
     private String detalle;
     
+    @Column(columnDefinition = "TEXT")
+    private String respuesta;
+
+    private String estado; // PENDIENTE, ATENDIDA
+
     private LocalDateTime fecha;
 
     public EventoAuditoria() {
         this.fecha = LocalDateTime.now();
+        this.estado = "PENDIENTE";
     }
 
     public EventoAuditoria(String ordenId, String canal, String tipoEvento, String detalle) {
@@ -30,6 +36,7 @@ public class EventoAuditoria {
         this.tipoEvento = tipoEvento;
         this.detalle = detalle;
         this.fecha = LocalDateTime.now();
+        this.estado = "PENDIENTE";
     }
 
     // Getters and Setters
@@ -43,6 +50,10 @@ public class EventoAuditoria {
     public void setTipoEvento(String tipoEvento) { this.tipoEvento = tipoEvento; }
     public String getDetalle() { return detalle; }
     public void setDetalle(String detalle) { this.detalle = detalle; }
+    public String getRespuesta() { return respuesta; }
+    public void setRespuesta(String respuesta) { this.respuesta = respuesta; }
+    public String getEstado() { return estado; }
+    public void setEstado(String estado) { this.estado = estado; }
     public LocalDateTime getFecha() { return fecha; }
     public void setFecha(LocalDateTime fecha) { this.fecha = fecha; }
 }

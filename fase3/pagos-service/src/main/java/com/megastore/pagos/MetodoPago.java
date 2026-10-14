@@ -17,20 +17,26 @@ public enum MetodoPago {
             return null;
         }
         String v = value.trim();
-        if ("CREDITO_PROPIO_30D".equalsIgnoreCase(v) ||
-            "credito_propio".equalsIgnoreCase(v) ||
-            "BNPL".equalsIgnoreCase(v) ||
-            v.toLowerCase().contains("credito") ||
-            v.toLowerCase().contains("30 dias") ||
-            v.toLowerCase().contains("30 días")) {
-            return CREDITO_PROPIO_30D;
-        }
+        String lower = v.toLowerCase();
         if ("TARJETA_PAYKLIK".equalsIgnoreCase(v) ||
             "PAYKLIK".equalsIgnoreCase(v) ||
             "TARJETA_CREDITO".equalsIgnoreCase(v) ||
-            v.toLowerCase().contains("payklik") ||
-            v.toLowerCase().contains("tarjeta")) {
+            lower.contains("payklik") ||
+            lower.contains("tarjeta") ||
+            lower.contains("transferencia") ||
+            lower.contains("billetera")) {
             return TARJETA_PAYKLIK;
+        }
+        if ("CREDITO_PROPIO_30D".equalsIgnoreCase(v) ||
+            "credito_propio".equalsIgnoreCase(v) ||
+            "BNPL".equalsIgnoreCase(v) ||
+            lower.contains("credito propio") ||
+            lower.contains("crédito propio") ||
+            lower.contains("credito_propio") ||
+            lower.contains("30 dias") ||
+            lower.contains("30 días") ||
+            lower.contains("bnpl")) {
+            return CREDITO_PROPIO_30D;
         }
         for (MetodoPago mp : values()) {
             if (mp.name().equalsIgnoreCase(v)) {

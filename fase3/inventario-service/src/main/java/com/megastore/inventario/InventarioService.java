@@ -191,21 +191,24 @@ public class InventarioService {
         List<Reserva> expiradas = reservaRepository.findByActivaTrueAndFechaExpiracionBefore(now);
 
         for (Reserva r : expiradas) {
-            r.setActiva(false);
-            reservaRepository.save(r);
-            
-            // Devolver inventario al stock físico al expirar la reserva (TTL 15 min excedido sin pago)
-            List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
-            if (stocks != null) {
-                for (Stock s : stocks) {
-                    if (s.getUbicacion().getId().equals(r.getUbicacionId())) {
-                        s.setCantidad(s.getCantidad() + r.getCantidad());
-                        stockRepository.save(s);
-                        break;
+            if (!r.isLiberada()) {
+                r.setActiva(false);
+                r.setLiberada(true);
+                reservaRepository.save(r);
+                
+                // Devolver inventario al stock físico al expirar la reserva (TTL 15 min excedido sin pago)
+                List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
+                if (stocks != null) {
+                    for (Stock s : stocks) {
+                        if (s.getUbicacion().getId().equals(r.getUbicacionId())) {
+                            s.setCantidad(s.getCantidad() + r.getCantidad());
+                            stockRepository.save(s);
+                            break;
+                        }
                     }
                 }
+                System.out.println("[EXPIRACION RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada y devuelta a stock para orden " + r.getOrdenId());
             }
-            System.out.println("[EXPIRACION RESERVA] Reserva " + r.getId() + " expirada (>15 min) liberada y devuelta a stock para orden " + r.getOrdenId());
         }
     }
 
@@ -216,16 +219,23 @@ public class InventarioService {
         String ordenId = (String) evento.get("ordenId");
         System.out.println("[INVENTARIO] Procesando liberacion de stock por orden cancelada: " + ordenId);
         List<Reserva> reservas = reservaRepository.findByOrdenIdAndActivaTrue(ordenId);
+        if (reservas == null || reservas.isEmpty()) {
+            reservas = reservaRepository.findByOrdenId(ordenId);
+        }
         for (Reserva r : reservas) {
-            r.setActiva(false);
-            reservaRepository.save(r);
-            List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
-            if (stocks != null) {
-                for (Stock s : stocks) {
-                    if (s.getUbicacion().getId().equals(r.getUbicacionId())) {
-                        s.setCantidad(s.getCantidad() + r.getCantidad());
-                        stockRepository.save(s);
-                        break;
+            if (!r.isLiberada()) {
+                r.setActiva(false);
+                r.setLiberada(true);
+                reservaRepository.save(r);
+                List<Stock> stocks = stockRepository.findByProductoId(r.getProductoId());
+                if (stocks != null) {
+                    for (Stock s : stocks) {
+                        if (s.getUbicacion().getId().equals(r.getUbicacionId())) {
+                            s.setCantidad(s.getCantidad() + r.getCantidad());
+                            stockRepository.save(s);
+                            System.out.println("[INVENTARIO] Stock liberado (+ " + r.getCantidad() + ") para producto " + r.getProductoId() + " en " + s.getUbicacion().getId());
+                            break;
+                        }
                     }
                 }
             }

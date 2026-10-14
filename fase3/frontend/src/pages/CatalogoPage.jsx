@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Filter, Tag, Zap } from 'lucide-react';
+import { Search, Filter, Tag, Zap, AlertTriangle } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { ProductCard } from '../components/ProductCard';
 import { Footer } from '../components/Footer';
@@ -13,10 +13,12 @@ export const CatalogoPage = () => {
   
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [onlyOfertas, setOnlyOfertas] = useState(isOfertasParam);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [maxPrice, setMaxPrice] = useState('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   useEffect(() => {
     if (isOfertasParam) {
@@ -35,6 +37,7 @@ export const CatalogoPage = () => {
         enStock: inStockOnly
       });
       setProducts(data);
+      setIsOffline(Boolean(data?.isOffline));
       setLoading(false);
     };
     fetchProducts();
@@ -50,6 +53,30 @@ export const CatalogoPage = () => {
       <Navbar />
 
       <main className="main-content catalogo-layout">
+        {isOffline && (
+          <div
+            className="glass-panel"
+            style={{
+              marginBottom: '1rem',
+              padding: '0.85rem 1.25rem',
+              borderLeft: '4px solid #f59e0b',
+              background: 'rgba(245, 158, 11, 0.12)',
+              color: '#fbbf24',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem'
+            }}
+          >
+            <AlertTriangle size={20} style={{ color: '#f59e0b', flexShrink: 0 }} />
+            <div>
+              <strong style={{ display: 'block', fontSize: '0.92rem' }}>Aviso del Sistema: Modo Catálogo Desconectado</strong>
+              <span style={{ fontSize: '0.84rem', color: '#fde68a' }}>
+                El servicio de inventario en tiempo real se encuentra temporalmente fuera de línea. Mostrando existencias y productos de la última sincronización.
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Banner Hero */}
         <div className="hero-banner glass-panel">
           <div className="banner-content">
@@ -66,10 +93,23 @@ export const CatalogoPage = () => {
           </button>
         </div>
 
+        {/* Mobile Filter Toggle Button */}
+        <div className="mobile-filter-bar">
+          <button 
+            type="button" 
+            className="btn-mobile-filters"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+          >
+            <Filter size={16} />
+            <span>{showMobileFilters ? 'Ocultar Filtros' : 'Filtrar Productos'}</span>
+            {selectedCategory !== 'Todas' && <span className="filter-pill-active">{selectedCategory}</span>}
+          </button>
+        </div>
+
         {/* Catalog Main Content Grid */}
         <div className="catalogo-grid">
           {/* Sidebar Filters */}
-          <aside className="filters-sidebar glass-panel">
+          <aside className={`filters-sidebar glass-panel ${showMobileFilters ? 'mobile-visible' : ''}`}>
             <div className="sidebar-header">
               <Filter size={18} className="icon-orange" />
               <h3>Filtros</h3>

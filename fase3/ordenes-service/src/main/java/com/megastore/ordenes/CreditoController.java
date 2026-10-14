@@ -48,9 +48,15 @@ public class CreditoController {
         return ResponseEntity.ok(respuesta);
     }
 
+    @GetMapping("/estado/{clienteId}")
+    public ResponseEntity<Map<String, Object>> obtenerEstadoCredito(@PathVariable String clienteId) {
+        return ResponseEntity.ok(creditoService.evaluarCredito(clienteId, BigDecimal.ZERO));
+    }
+
     @PostMapping("/abono")
     public ResponseEntity<Map<String, Object>> registrarAbono(@RequestBody Map<String, Object> request) {
         String clienteId = request.get("clienteId") != null ? request.get("clienteId").toString() : "1";
+        String ordenId = request.get("ordenId") != null ? request.get("ordenId").toString() : null;
         BigDecimal montoAbono = BigDecimal.ZERO;
         if (request.get("monto") instanceof Number) {
             montoAbono = new BigDecimal(request.get("monto").toString());
@@ -64,7 +70,7 @@ public class CreditoController {
             return ResponseEntity.badRequest().body(Map.of("error", "El monto de abono debe ser mayor a 0"));
         }
 
-        Map<String, Object> resp = creditoService.registrarAbono(clienteId, montoAbono);
+        Map<String, Object> resp = creditoService.registrarAbono(clienteId, montoAbono, ordenId);
         return ResponseEntity.ok(resp);
     }
 }
