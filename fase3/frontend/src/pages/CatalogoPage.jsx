@@ -18,6 +18,7 @@ export const CatalogoPage = () => {
   const [onlyOfertas, setOnlyOfertas] = useState(isOfertasParam);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [maxPrice, setMaxPrice] = useState('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   useEffect(() => {
     if (isOfertasParam) {
@@ -92,10 +93,23 @@ export const CatalogoPage = () => {
           </button>
         </div>
 
+        {/* Mobile Filter Toggle Button */}
+        <div className="mobile-filter-bar">
+          <button 
+            type="button" 
+            className="btn-mobile-filters"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+          >
+            <Filter size={16} />
+            <span>{showMobileFilters ? 'Ocultar Filtros' : 'Filtrar Productos'}</span>
+            {selectedCategory !== 'Todas' && <span className="filter-pill-active">{selectedCategory}</span>}
+          </button>
+        </div>
+
         {/* Catalog Main Content Grid */}
         <div className="catalogo-grid">
           {/* Sidebar Filters */}
-          <aside className="filters-sidebar glass-panel">
+          <aside className={`filters-sidebar glass-panel ${showMobileFilters ? 'mobile-visible' : ''}`}>
             <div className="sidebar-header">
               <Filter size={18} className="icon-orange" />
               <h3>Filtros</h3>

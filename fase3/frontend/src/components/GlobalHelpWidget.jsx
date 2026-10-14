@@ -173,7 +173,7 @@ export const GlobalHelpWidget = () => {
         }}>
           <LifeBuoy size={18} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="fab-text-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontWeight: 700, fontSize: '0.86rem', letterSpacing: '0.2px', lineHeight: 1.2 }}>
             ¿Necesitas ayuda?
           </span>
