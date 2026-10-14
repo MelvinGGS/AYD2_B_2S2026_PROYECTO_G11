@@ -42,25 +42,6 @@ Para verificar el estado y puertos de los contenedores en ejecucion:
 ```bash
 docker compose ps
 ```
-
----
-
-## 4. Puertos y Enlaces de Acceso
-
-- **Frontend Omnicanal (React 18 SPA):** `http://localhost:5173` (Desarrollo) o `http://localhost:3000` (Docker)
-  - Modulos: Catalogo, Carrito, Checkout Tradicional PayKlik, Checkout BNPL 30 dias, Confirmacion, Seguimiento en Vivo y Dashboard Ops Admin (`/admin/dashboard`).
-- **Servicio de Ordenes (Spring Boot 17):** `http://localhost:8081/api/ordenes`
-  - Scoring Crediticio: `POST http://localhost:8081/api/credito/evaluar`
-- **Servicio de Inventario (Spring Boot 17):** `http://localhost:8082/api/inventario`
-  - Inventario Unificado: `GET http://localhost:8082/api/inventario/unificado`
-- **Servicio de Pagos (Spring Boot 17):** `http://localhost:8083/api/pagos`
-- **Servicio de Facturacion (Spring Boot 17):** `http://localhost:8084/api/facturas`
-- **Servicio de Logistica (.NET 8):** `http://localhost:8085/api/logistica`
-- **Servicio de Notificaciones (.NET 8 SSE):** `http://localhost:8086/api/notificaciones`
-- **RabbitMQ Management Dashboard:** `http://localhost:15672` (Usuario: `guest`, Password: `guest`)
-- **PostgreSQL 15 Cluster:** `localhost:5432` (Base de datos: `sgologic`, Usuario: `sgologic`, Clave: `sgologic2026`)
-- **Redis Cache 7.2:** `localhost:6379`
-
 ---
 
 ## 5. Ejecucion de Pruebas Automatizadas
@@ -99,11 +80,5 @@ docker run --rm -v $(pwd)/pagos-service:/app -w /app maven:3.9.6-eclipse-temurin
 Todos los documentos tecnicos y diagramas de arquitectura se encuentran en el directorio `fase3/`:
 - `Manual_Tecnico.md`: Especificacion de arquitectura, contratos OpenAPI, reglas BNPL y topologia GCP.
 - `Manual_Usuario.md`: Guia paso a paso para el cliente final y para el administrador de operaciones.
-- `ACTUALIZACION-DIAGRAMAS.md`: Documentacion de diagramas arquitectonicos con Mermaid y Draw.io.
-- `docs/diagramaDespliegueGCP.drawio`: Diagrama de despliegue en Google Cloud Platform.
-- `docs/diagramaComponentes.drawio`: Diagrama de componentes UML de microservicios.
-- `docs/diagramaSecuenciaBNPL.drawio`: Diagrama de secuencia UML del flujo BNPL 30 dias.
-- `docs/diagramaBloquesC4.drawio`: Diagrama de bloques C4 de contenedores.
-- `SPRINT-PLANNING.md`: Planificacion del sprint con historias BDD / Gherkin.
-- `DAILY-STANDUPS.md`: Bitacora diaria de sincronizacion del equipo.
-- `SPRINT-RETROSPECTIVE.md`: Retrospectiva formal del sprint y lecciones aprendidas.
+- `ACTUALIZACION-DIAGRAMAS.md`: Documentacion detallada de diagramas arquitectonicos.
+- `docs/`: Directorio que contiene las imagenes exportadas de los diagramas de arquitectura (Despliegue GCP, Componentes UML, Secuencia BNPL, Bloques C4, Algoritmo Scoring BNPL, Ciclo de Vida y Resiliencia DLQ).
