@@ -33,7 +33,10 @@ export const CartProvider = ({ children }) => {
   }, [cartItems]);
 
   const addToCart = (product, quantity = 1) => {
-    const maxStock = typeof product.stock === 'number' && product.stock > 0 ? product.stock : 25;
+    if (typeof product?.stock === 'number' && product.stock <= 0) {
+      return; // No agregar productos agotados
+    }
+    const maxStock = typeof product?.stock === 'number' && product.stock > 0 ? product.stock : 25;
     setCartItems(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {

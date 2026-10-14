@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Search, User, LogOut, LayoutDashboard, Shield, Package, Store } from 'lucide-react';
+import { ShoppingCart, Search, User, LogOut, LayoutDashboard, Shield, Package, Store, HelpCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { ProfileModal } from './ProfileModal';
@@ -62,6 +62,26 @@ export const Navbar = ({ hideSearch = false, hideLinks = false }) => {
                   <Package size={16} /> Mis Pedidos
                 </Link>
               )}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-help-modal'))}
+                className="nav-link"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--orange-primary)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem'
+                }}
+                title="Centro de ayuda y atención al cliente"
+              >
+                <HelpCircle size={16} />
+                <span>¿Necesitas ayuda?</span>
+              </button>
             </nav>
           )}
 

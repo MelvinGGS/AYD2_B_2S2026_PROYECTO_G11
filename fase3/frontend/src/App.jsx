@@ -11,6 +11,7 @@ import { CheckoutPage } from './pages/CheckoutPage';
 import { ConfirmacionPage } from './pages/ConfirmacionPage';
 import { SeguimientoPage } from './pages/SeguimientoPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { GlobalHelpWidget } from './components/GlobalHelpWidget';
 
 export function App() {
   return (
@@ -33,6 +34,7 @@ export function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <GlobalHelpWidget />
         </BrowserRouter>
       </CartProvider>
     </AuthProvider>

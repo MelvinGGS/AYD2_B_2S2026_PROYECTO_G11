@@ -10,7 +10,10 @@ export const ProductCard = ({ product }) => {
   const navigate = useNavigate();
   const [added, setAdded] = useState(false);
 
+  const agotado = typeof product.stock === 'number' && product.stock <= 0;
+
   const handleAdd = () => {
+    if (agotado) return;
     if (!user) {
       navigate('/login?redirect=/catalogo');
       return;
@@ -40,8 +43,8 @@ export const ProductCard = ({ product }) => {
             e.target.src = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=600&q=80';
           }}
         />
-        <span className={`product-badge badge ${getTagClass(product.tagType)}`}>
-          {product.tag}
+        <span className={`product-badge badge ${agotado ? 'badge-error' : getTagClass(product.tagType)}`}>
+          {agotado ? 'Agotado' : (product.tag || 'Disponible')}
         </span>
         {product.rating && (
           <div className="rating-badge">
@@ -68,14 +71,19 @@ export const ProductCard = ({ product }) => {
 
           <button
             onClick={handleAdd}
+            disabled={agotado}
             className={`btn-add-cart ${added ? 'added' : ''}`}
-            aria-label="Agregar al carrito"
+            style={agotado ? { opacity: 0.5, cursor: 'not-allowed', background: '#475569', borderColor: '#64748b' } : {}}
+            aria-label={agotado ? 'Producto agotado' : 'Agregar al carrito'}
+            title={agotado ? 'Sin existencias en almacén' : 'Agregar producto al carrito'}
           >
             {added ? (
               <>
                 <Check size={18} />
                 <span className="btn-text">¡Agregado!</span>
               </>
+            ) : agotado ? (
+              <span className="btn-text" style={{ color: '#cbd5e1' }}>Agotado</span>
             ) : (
               <>
                 <ShoppingCart size={18} />

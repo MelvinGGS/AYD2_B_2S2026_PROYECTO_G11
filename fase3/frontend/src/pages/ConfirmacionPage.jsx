@@ -62,10 +62,16 @@ export const ConfirmacionPage = () => {
     ? pagoStatus.intentos[pagoStatus.intentos.length - 1]
     : null;
 
+  const esSinStock = orden?.estado === 'INVENTARIO_INSUFICIENTE';
+  const esCancelada = orden?.estado === 'CANCELADA';
+  const esOrdenFallida = esSinStock || esCancelada;
+
   const enContingenciaPagos =
-    !pagoStatus.online ||
-    orden?.estado === 'PAGO_EN_CONTINGENCIA' ||
-    ultimoIntento?.resultado === 'ENCOLADO_CONTINGENCIA';
+    !esOrdenFallida && (
+      !pagoStatus.online ||
+      orden?.estado === 'PAGO_EN_CONTINGENCIA' ||
+      ultimoIntento?.resultado === 'ENCOLADO_CONTINGENCIA'
+    );
 
   return (
     <div className="app-container">
@@ -89,21 +95,52 @@ export const ConfirmacionPage = () => {
           </div>
         ) : (
           <div className="confirmacion-card glass-panel">
-            {/* Big Success Check Badge */}
+            {/* Big Status Badge */}
             <div className="success-icon-wrapper">
-              <CheckCircle2 size={54} className="success-check-icon" />
+              {esOrdenFallida ? (
+                <AlertTriangle size={54} style={{ color: '#ef4444' }} />
+              ) : (
+                <CheckCircle2 size={54} className="success-check-icon" />
+              )}
             </div>
 
             {/* Title & Order ID */}
             <div className="confirmacion-header-text">
-              <h1 className="confirmacion-title">Orden confirmada exitosamente</h1>
+              <h1 className="confirmacion-title" style={esOrdenFallida ? { color: '#f87171' } : {}}>
+                {esSinStock
+                  ? 'Orden detenida por falta de stock'
+                  : esCancelada
+                    ? 'Orden cancelada'
+                    : 'Orden confirmada exitosamente'}
+              </h1>
               <p className="order-number-text">
                 Número de orden: <span className="order-number-highlight">#{orden?.id || 'PROCESANDO'}</span>
               </p>
             </div>
 
-            {/* Circuit Breaker & RabbitMQ Contingency Status Banner */}
-            {enContingenciaPagos ? (
+            {/* Banner State: Fallida vs Contingencia vs Confirmada */}
+            {esOrdenFallida ? (
+              <div
+                className="status-banner-card"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.45)',
+                  color: '#f87171'
+                }}
+              >
+                <AlertTriangle size={26} style={{ color: '#ef4444', flexShrink: 0 }} />
+                <div>
+                  <h4 className="banner-heading" style={{ color: '#f87171' }}>
+                    {esSinStock ? 'Existencias Insuficientes en Bodega' : 'Orden Cancelada'}
+                  </h4>
+                  <p className="banner-subtext" style={{ color: '#fca5a5' }}>
+                    {esSinStock
+                      ? 'Uno o más productos seleccionados se agotaron en bodega durante el procesamiento concurrente. No se ha efectuado ningún cobro a tu cuenta.'
+                      : 'Esta orden ha sido cancelada y cualquier reserva de inventario asociada fue liberada al almacén.'}
+                  </p>
+                </div>
+              </div>
+            ) : enContingenciaPagos ? (
               <div
                 className="status-banner-card"
                 style={{
@@ -115,14 +152,10 @@ export const ConfirmacionPage = () => {
                 <AlertTriangle size={26} style={{ color: '#f59e0b', flexShrink: 0 }} />
                 <div>
                   <h4 className="banner-heading" style={{ color: '#fbbf24' }}>
-                    {!pagoStatus.online
-                      ? 'Contingencia Activa: Microservicio de Pagos (:8083) Detenido — Transacción Persistida en RabbitMQ'
-                      : 'Circuit Breaker Abierto: Cobro Resguardado en Cola de Contingencia (RabbitMQ DLQ)'}
+                    Procesamiento de Pago en Curso
                   </h4>
                   <p className="banner-subtext" style={{ color: '#fde68a' }}>
-                    {!pagoStatus.online
-                      ? `El contenedor de pagos no responde en este instante, pero tu orden #${orden?.id} y tu reserva de inventario están 100% persistidas en la cola durable 'pagos.queue' de RabbitMQ. En cuanto el servicio se levante, el cobro y la facturación SAT continuarán automáticamente.`
-                      : `La pasarela externa reportó indisponibilidad temporal. Resilience4j activó el fallback y encoló tu pago en 'pagos.dlq' (Estado: ${orden?.estado || 'ENCOLADO_CONTINGENCIA'}) sin perder tu pedido.`}
+                    Tu orden #{orden?.id} y la reserva de tus artículos se han registrado exitosamente. La validación del pago se encuentra en proceso de confirmación y se completará automáticamente.
                   </p>
                 </div>
               </div>
@@ -131,13 +164,13 @@ export const ConfirmacionPage = () => {
                 <Info className="banner-info-icon" size={24} />
                 <div>
                   <h4 className="banner-heading">
-                    Procesando transmisión omnicanal ({orden?.estado || 'EN_PREPARACION'})
+                    Orden Registrada con Éxito
                   </h4>
                   <p className="banner-subtext">
-                    Tu orden ha sido registrada en SGO-Logic.{' '}
+                    Tu pedido ha sido confirmado.{' '}
                     {ultimoIntento?.referenciaPayklik
-                      ? `Transacción autorizada (${ultimoIntento.referenciaPayklik}). Facturación electrónica SAT emitida y despacho en curso.`
-                      : 'Facturación electrónica emitida y despacho en curso.'}
+                      ? `Transacción autorizada con referencia ${ultimoIntento.referenciaPayklik}. Facturación electrónica y preparación de envío en curso.`
+                      : 'Facturación electrónica y preparación de envío en curso.'}
                   </p>
                 </div>
               </div>
@@ -166,10 +199,14 @@ export const ConfirmacionPage = () => {
                 </div>
                 <div className="summary-line">
                   <span>Estado del cobro</span>
-                  <span style={{ fontWeight: 700, color: enContingenciaPagos ? '#fbbf24' : '#34d399' }}>
-                    {!pagoStatus.online
-                      ? 'EN COLA RABBITMQ (PAGOS OFFLINE)'
-                      : (ultimoIntento?.resultado || (orden?.estado !== 'CREADA' ? 'CONFIRMADO' : 'PROCESANDO EN MQ'))}
+                  <span style={{ fontWeight: 700, color: esOrdenFallida ? '#ef4444' : (enContingenciaPagos ? '#fbbf24' : '#34d399') }}>
+                    {esOrdenFallida
+                      ? 'SIN CARGO / ANULADO'
+                      : (!pagoStatus.online
+                        ? 'EN PROCESO DE CONFIRMACIÓN'
+                        : (ultimoIntento?.resultado === 'ENCOLADO_CONTINGENCIA'
+                          ? 'EN PROCESO DE CONFIRMACIÓN'
+                          : (orden?.estado !== 'CREADA' ? 'CONFIRMADO' : 'EN PROCESO')))}
                   </span>
                 </div>
 
@@ -187,13 +224,15 @@ export const ConfirmacionPage = () => {
               </div>
             </div>
 
-            {/* Estimated Delivery Widget */}
-            <div className="delivery-estimate-card">
-              <Calendar size={20} className="icon-orange" />
-              <span>Entrega estimada: <strong>{getEstimatedDate()}</strong></span>
-            </div>
+            {/* Estimated Delivery Widget (only for active orders) */}
+            {!esOrdenFallida && (
+              <div className="delivery-estimate-card">
+                <Calendar size={20} className="icon-orange" />
+                <span>Entrega estimada: <strong>{getEstimatedDate()}</strong></span>
+              </div>
+            )}
 
-            {esCreditoPropio && (
+            {esCreditoPropio && !esOrdenFallida && (
               <div className="delivery-estimate-card" style={{ marginTop: '0.75rem', borderColor: 'rgba(255, 107, 0, 0.35)' }}>
                 <ShieldCheck size={20} className="icon-orange" />
                 <span>
@@ -214,7 +253,7 @@ export const ConfirmacionPage = () => {
                 onClick={() => navigate(orden?.id ? `/seguimiento/${orden.id}` : '/seguimiento')}
                 className="btn-primary flex-1-btn"
               >
-                <span>Ver estado de mi orden</span>
+                <span>{esOrdenFallida ? 'Ver detalle en Seguimiento' : 'Ver estado de mi orden'}</span>
                 <ArrowRight size={18} />
               </button>
 
@@ -222,7 +261,7 @@ export const ConfirmacionPage = () => {
                 onClick={() => navigate('/catalogo')}
                 className="btn-secondary flex-1-btn"
               >
-                Seguir comprando
+                {esOrdenFallida ? 'Volver al catálogo a elegir productos' : 'Seguir comprando'}
               </button>
             </div>
           </div>

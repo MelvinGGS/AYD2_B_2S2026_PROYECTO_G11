@@ -12,6 +12,8 @@ import {
   abonarCreditoCliente,
   obtenerHistorialPagoOrden,
   getEstadoCreditoCliente,
+  reprocesarPagosContingencia,
+  getIncidenciasOrden,
   FACTURACION_API
 } from '../services/api';
 import { esMetodoCreditoPropio } from '../utils/checkoutUtils';
@@ -33,6 +35,13 @@ export const SeguimientoPage = () => {
   const [pagoStatus, setPagoStatus] = useState({ online: true, intentos: [] });
   const [ordenesLiquidadas, setOrdenesLiquidadas] = useState([]);
 
+  const [orderError, setOrderError] = useState('');
+  const [reintentandoPago, setReintentandoPago] = useState(false);
+  const [reintentoMsg, setReintentoMsg] = useState('');
+  const [helpTab, setHelpTab] = useState('registrar'); // 'registrar' | 'historial'
+  const [historialIncidencias, setHistorialIncidencias] = useState([]);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+
   const refreshPaymentAndCredit = async (ordObj) => {
     if (!ordObj?.id) return;
     try {
@@ -52,6 +61,7 @@ export const SeguimientoPage = () => {
   useEffect(() => {
     const fetchOrderData = async () => {
       setLoading(true);
+      setOrderError('');
       try {
         const allOrders = await getOrdenes();
         let displayList = [];
@@ -79,12 +89,15 @@ export const SeguimientoPage = () => {
         if (targetId) {
           const data = await getOrden(targetId);
           setOrden(data);
-          await refreshPaymentAndCredit(data);
+          if (data) {
+            await refreshPaymentAndCredit(data);
+          }
         } else {
           setOrden(null);
         }
       } catch (err) {
         console.warn('No se pudo cargar la orden:', err);
+        setOrderError(err.message || 'El servicio de órdenes no se encuentra disponible.');
         setOrden(null);
       } finally {
         setLoading(false);
@@ -177,17 +190,56 @@ export const SeguimientoPage = () => {
     };
   }, [orden?.id, orden?.estado]);
 
+  const fetchIncidenciasOrden = async (ordId) => {
+    if (!ordId) return;
+    setCargandoHistorial(true);
+    try {
+      const incs = await getIncidenciasOrden(ordId);
+      setHistorialIncidencias(incs);
+    } catch (e) {
+      console.warn('Error al cargar historial de incidencias:', e);
+    } finally {
+      setCargandoHistorial(false);
+    }
+  };
+
+  const handleOpenHelpModal = () => {
+    window.dispatchEvent(new CustomEvent('open-help-modal', { detail: { ordenId: orden?.id } }));
+  };
+
+  const handleReintentarPagoCliente = async () => {
+    if (!orden?.id) return;
+    setReintentandoPago(true);
+    setReintentoMsg('');
+    try {
+      const res = await reprocesarPagosContingencia();
+      setReintentoMsg(`Reintento ejecutado: ${res.reprocesados || 0} pago(s) procesado(s). Verificando confirmación...`);
+      setTimeout(async () => {
+        const fresh = await getOrden(orden.id);
+        if (fresh) {
+          setOrden(fresh);
+          await refreshPaymentAndCredit(fresh);
+        }
+        setReintentandoPago(false);
+      }, 1500);
+    } catch (err) {
+      setReintentoMsg(`Pasarela aún en contingencia: ${err.message}. Tu reserva de inventario permanece protegida.`);
+      setReintentandoPago(false);
+    }
+  };
+
   const handleSendIncident = async (e) => {
     e.preventDefault();
     if (orden?.id) {
       await registrarIncidenciaCliente(orden.id, incidentType, incidentNote);
+      await fetchIncidenciasOrden(orden.id);
     }
     setIncidentSent(true);
     setTimeout(() => {
       setIncidentSent(false);
-      setShowHelpModal(false);
       setIncidentNote('');
-    }, 2200);
+      setHelpTab('historial');
+    }, 1800);
   };
 
   const handleSearchOrder = (e) => {
@@ -291,12 +343,16 @@ export const SeguimientoPage = () => {
           </div>
         ) : !orden ? (
           <div className="empty-results glass-panel" style={{ padding: '3rem 2rem', textAlign: 'center' }}>
-            <Package size={52} style={{ color: 'var(--orange-primary)', margin: '0 auto 1rem' }} />
+            {orderError ? (
+              <AlertTriangle size={52} style={{ color: '#ef4444', margin: '0 auto 1rem' }} />
+            ) : (
+              <Package size={52} style={{ color: 'var(--orange-primary)', margin: '0 auto 1rem' }} />
+            )}
             <h3 style={{ fontSize: '1.4rem', color: 'var(--text-main)', marginBottom: '0.6rem', fontWeight: 700 }}>
-              {ordenId ? `No se encontró la orden "${ordenId}"` : 'No hay pedidos activos'}
+              {orderError ? 'Servicio no disponible' : (ordenId ? `No se encontró la orden "${ordenId}"` : 'No hay pedidos activos')}
             </h3>
             <p style={{ color: 'var(--text-secondary)', maxWidth: 480, margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
-              Verifica el identificador de orden o ingresa uno en el buscador superior. También puedes crear un pedido desde el catálogo.
+              {orderError || 'Verifica el identificador de orden o ingresa uno en el buscador superior. También puedes crear un pedido desde el catálogo.'}
             </p>
             <button onClick={() => navigate('/catalogo')} className="btn-primary">
               Ir al Catálogo de Productos
@@ -312,7 +368,7 @@ export const SeguimientoPage = () => {
               </div>
               <button
                 className="btn-secondary btn-help"
-                onClick={() => setShowHelpModal(true)}
+                onClick={handleOpenHelpModal}
               >
                 <HelpCircle size={16} />
                 <span>¿Necesitas ayuda?</span>
@@ -360,23 +416,36 @@ export const SeguimientoPage = () => {
                 <div style={{
                   background: 'rgba(245, 158, 11, 0.12)',
                   border: '1px solid rgba(245, 158, 11, 0.4)',
-                  padding: '10px 14px',
+                  padding: '12px 16px',
                   borderRadius: '8px',
                   marginBottom: '1rem',
                   fontSize: '0.84rem',
                   color: '#fde68a',
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: '0.6rem'
+                  gap: '0.75rem'
                 }}>
-                  <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
-                  <div>
-                    <strong style={{ color: '#fbbf24', display: 'block' }}>
-                      Procesamiento de Pago en Curso
+                  <AlertTriangle size={20} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: '#fbbf24', display: 'block', marginBottom: '3px' }}>
+                      Procesamiento de Pago en Curso (Contingencia DLQ)
                     </strong>
                     <span>
-                      Tu orden y productos están reservados. La confirmación del pago se completará automáticamente en breve sin afectar tu entrega.
+                      Tu orden y productos están reservados temporalmente (bloqueo de 15 min). La confirmación del pago se completará automáticamente en breve o puedes reintentar el procesamiento.
                     </span>
+                    <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={handleReintentarPagoCliente}
+                        disabled={reintentandoPago}
+                        className="btn-primary btn-sm"
+                        style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                      >
+                        {reintentandoPago ? 'Reintentando cobro...' : 'Reintentar Pago Ahora'}
+                      </button>
+                      {reintentoMsg && (
+                        <span style={{ fontSize: '0.78rem', color: '#fde68a' }}>{reintentoMsg}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -522,17 +591,24 @@ export const SeguimientoPage = () => {
                       <span>Cancelar Orden</span>
                     </button>
                   )}
-                  <a
-                    href={`${FACTURACION_API}/orden/${orden.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-secondary btn-sm"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--orange-primary)' }}
-                    title="Descargar comprobante tributario oficial SAT FEL en formato XML"
-                  >
-                    <FileText size={15} />
-                    <span>Descargar Factura XML</span>
-                  </a>
+                  {['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA', 'PAGADA'].includes(orden.estado) ? (
+                    <a
+                      href={`${FACTURACION_API}/orden/${orden.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-secondary btn-sm"
+                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--orange-primary)' }}
+                      title="Descargar comprobante tributario oficial SAT FEL en formato XML"
+                    >
+                      <FileText size={15} />
+                      <span>Descargar Factura XML</span>
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <FileText size={14} style={{ opacity: 0.5 }} />
+                      <span>{orden.estado === 'INVENTARIO_INSUFICIENTE' || orden.estado === 'CANCELADA' ? 'Sin factura fiscal (orden cancelada)' : 'Factura SAT en emisión'}</span>
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -540,8 +616,8 @@ export const SeguimientoPage = () => {
         )}
       </main>
 
-      {/* Modal Centro de Ayuda y Gestion de Incidencias */}
-      {showHelpModal && (
+      {/* Modal delegado al widget global GlobalHelpWidget */}
+      {false && (
         <div className="modal-backdrop animate-fade-in" onClick={() => setShowHelpModal(false)}>
           <div className="profile-modal-card glass-panel" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -559,11 +635,106 @@ export const SeguimientoPage = () => {
               </button>
             </div>
 
-            {incidentSent ? (
+            {/* Sub-tabs: Registrar Atención vs Consultar Historial */}
+            <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', margin: '1rem 0 1.25rem' }}>
+              <button
+                type="button"
+                onClick={() => setHelpTab('registrar')}
+                style={{
+                  padding: '8px 16px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: helpTab === 'registrar' ? '2px solid var(--orange-primary)' : '2px solid transparent',
+                  color: helpTab === 'registrar' ? 'var(--orange-primary)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.88rem'
+                }}
+              >
+                Registrar Atención
+              </button>
+              <button
+                type="button"
+                onClick={() => { setHelpTab('historial'); if (orden?.id) fetchIncidenciasOrden(orden.id); }}
+                style={{
+                  padding: '8px 16px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: helpTab === 'historial' ? '2px solid var(--orange-primary)' : '2px solid transparent',
+                  color: helpTab === 'historial' ? 'var(--orange-primary)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.88rem'
+                }}
+              >
+                Consultar Historial {historialIncidencias.length > 0 ? `(${historialIncidencias.length})` : ''}
+              </button>
+            </div>
+
+            {helpTab === 'historial' ? (
+              <div className="help-history-wrapper">
+                <h4 className="section-title" style={{ marginBottom: '0.75rem' }}>
+                  Historial de Requerimientos y Quejas Registradas
+                </h4>
+                {cargandoHistorial ? (
+                  <p style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                    Consultando incidencias asociadas a la orden...
+                  </p>
+                ) : historialIncidencias.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-secondary)' }}>
+                    <p style={{ marginBottom: '0.8rem' }}>No hay incidencias ni reportes registrados para esta orden.</p>
+                    <button
+                      type="button"
+                      onClick={() => setHelpTab('registrar')}
+                      className="btn-secondary btn-sm"
+                    >
+                      Registrar atención ahora
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {historialIncidencias.map((inc) => (
+                      <div
+                        key={inc.id}
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          padding: '10px 14px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span className="font-mono text-orange" style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                            TCK-{inc.id}
+                          </span>
+                          <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>
+                            REGISTRADA
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                          {inc.tipoEvento?.replace('INCIDENCIA_', '').toUpperCase()}
+                        </div>
+                        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 6px', lineHeight: 1.4 }}>
+                          {inc.detalle}
+                        </p>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                          Fecha: {new Date(inc.fecha).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
+                  <button type="button" onClick={() => setShowHelpModal(false)} className="btn-secondary">
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            ) : incidentSent ? (
               <div className="status-banner-card text-success" style={{ margin: '1.5rem 0', textAlign: 'center' }}>
                 <ShieldCheck size={24} style={{ margin: '0 auto 0.5rem' }} />
                 <h4 style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Incidencia Registrada</h4>
-                <p style={{ fontSize: '0.9rem' }}>Tu solicitud ha sido remitida al Call Center. Te contactaremos en breve.</p>
+                <p style={{ fontSize: '0.9rem' }}>Tu solicitud ha sido remitida al Call Center. Redirigiendo a tu historial...</p>
               </div>
             ) : (
               <div className="help-content-wrapper">
