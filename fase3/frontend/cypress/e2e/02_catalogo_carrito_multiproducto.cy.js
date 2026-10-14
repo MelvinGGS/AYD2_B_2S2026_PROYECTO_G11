@@ -3,6 +3,14 @@ describe('E2E Spec 02 - Catalogo Dinamico, Filtros y Carrito Multiproducto Persi
   beforeEach(() => {
     cy.clearLocalStorage();
     cy.clearCookies();
+    const clienteMock = {
+      id: 1,
+      nombre: 'Melvin Garcia',
+      email: 'cliente@megastore.com',
+      role: 'cliente',
+      token: 'jwt-cliente-token-fase3'
+    };
+    cy.setSessionUser(clienteMock);
   });
 
   it('Flujo 1: Debe explorar catalogo, aplicar filtros por categoria y realizar busqueda en vivo', () => {

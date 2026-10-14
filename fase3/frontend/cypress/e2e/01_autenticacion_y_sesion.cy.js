@@ -57,9 +57,15 @@ describe('E2E Spec 01 - Autenticacion, Sesion y Control de Acceso Omnicanal', ()
       expect(win.localStorage.getItem('sgologic_user')).to.be.null;
     });
 
-    // Intentar acceder a ruta protegida de Checkout sin sesion
+    // Intentar acceder a rutas protegidas sin sesion (Checkout, Carrito, Seguimiento)
     cy.visit('/checkout');
     cy.url().should('include', '/login?redirect=/checkout');
+
+    cy.visit('/carrito');
+    cy.url().should('include', '/login?redirect=/carrito');
+
+    cy.visit('/seguimiento');
+    cy.url().should('include', '/login?redirect=/seguimiento');
   });
 
   it('Flujo 3: Cliente no debe tener acceso a /admin/dashboard mostrando pantalla de restriccion', () => {

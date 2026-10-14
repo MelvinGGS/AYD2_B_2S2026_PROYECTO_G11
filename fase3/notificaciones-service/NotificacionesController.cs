@@ -29,6 +29,19 @@ namespace NotificacionesService
             });
         }
 
+        [HttpGet("health")]
+        public IActionResult Health()
+        {
+            return Ok(new
+            {
+                servicio = "notificaciones-service",
+                estado = "OPERATIVO",
+                rabbitmq = "Conectado",
+                clientesWebSocketActivos = _webSocketHub.ConnectedClientsCount,
+                timestamp = DateTime.UtcNow
+            });
+        }
+
         [HttpGet("stats")]
         public IActionResult GetStats()
         {

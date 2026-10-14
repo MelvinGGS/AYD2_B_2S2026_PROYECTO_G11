@@ -5,7 +5,8 @@ import {
   calcularVencimientoCredito,
   formatearDetalleBNPL,
   filtrarMetodosPagoDisponibles,
-  validarFormularioCheckout
+  validarFormularioCheckout,
+  esMetodoCreditoPropio
 } from '../src/utils/checkoutUtils.js';
 
 describe('Suite de 5 Pruebas Unitarias - Checkout y Credito Propio (BNPL) - Carne 202300712', () => {
@@ -98,8 +99,8 @@ describe('Suite de 5 Pruebas Unitarias - Checkout y Credito Propio (BNPL) - Carn
     assert.throws(() => formatearDetalleBNPL('cien', 30, fechaVence), /Monto de orden inválido/);
   });
 
-  // PRUEBA UNITARIA 4: Filtrado Dinamico de Metodos de Pago segun Scoring
-  test('4. filtrarMetodosPagoDisponibles: antepone credito_propio si califica y lo excluye si no califica', () => {
+  // PRUEBA UNITARIA 4: Filtrado Dinamico de Metodos de Pago segun Scoring y Deteccion Centralizada BNPL
+  test('4. filtrarMetodosPagoDisponibles y esMetodoCreditoPropio: antepone credito_propio si califica y clasifica variantes BNPL', () => {
     const metodosBase = ['payklik', 'transferencia', 'billetera'];
 
     // Cliente apto: credito_propio aparece como primera opcion destacada sin duplicar
@@ -125,6 +126,14 @@ describe('Suite de 5 Pruebas Unitarias - Checkout y Credito Propio (BNPL) - Carn
     // Resiliencia ante entrada invalida (no arreglo)
     assert.deepStrictEqual(filtrarMetodosPagoDisponibles(null, true), []);
     assert.deepStrictEqual(filtrarMetodosPagoDisponibles(undefined, false), []);
+
+    // Clasificacion centralizada de cadenas de metodo de pago BNPL
+    assert.strictEqual(esMetodoCreditoPropio('credito_propio'), true);
+    assert.strictEqual(esMetodoCreditoPropio('CREDITO_PROPIO_30D'), true);
+    assert.strictEqual(esMetodoCreditoPropio('Credito Propio (Paga en 30 dias)'), true);
+    assert.strictEqual(esMetodoCreditoPropio('PayKlik (Tarjeta de Credito)'), false);
+    assert.strictEqual(esMetodoCreditoPropio('PayKlik'), false);
+    assert.strictEqual(esMetodoCreditoPropio(null), false);
   });
 
   // PRUEBA UNITARIA 5: Validacion de Campos de Formulario Checkout

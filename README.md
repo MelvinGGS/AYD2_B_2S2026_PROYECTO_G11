@@ -24,6 +24,14 @@ Contiene la justificación de decisiones arquitectónicas (ADRs), atributos de c
 
 Contiene el código fuente completo, contenedores Docker, microservicios en Java Spring Boot y C# .NET 8, frontend web reactivo en React 18, caché Redis, base de datos PostgreSQL y bus de eventos RabbitMQ.
 
+### [Fase 3 — Campaña BNPL 30 días, Pruebas Automatizadas y Despliegue Cloud (GCP)](fase3/README.md)
+
+Contiene la evolución arquitectónica con la campaña comercial **Buy Now Pay Later (BNPL) 30 días (0% interés)**, motor de scoring crediticio desacoplado, trazabilidad reactiva vía Server-Sent Events (SSE), persistencia con bloqueo optimista ante alta concurrencia, capa anticorrupción (ACL) para ERP AS/400, facturación electrónica SAT (FEL), suite de 25 pruebas automatizadas (unitarias, integración, E2E, estrés y carga), CI/CD automatizado con GitHub Actions y despliegue en Google Cloud Platform (GCP).
+
+- [Ver entregables de la Fase 3](fase3/README.md)
+- [Manual Técnico de la Fase 3](fase3/Manual_Tecnico.md)
+- [Manual de Usuario de la Fase 3](fase3/Manual_Usuario.md)
+
 ## Iniciar toda la fase2
 
 ```bash

@@ -18,11 +18,13 @@ public class Reserva {
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaExpiracion;
     private boolean activa;
+    private boolean liberada = false;
 
     public Reserva() {
         this.fechaCreacion = LocalDateTime.now();
         this.fechaExpiracion = this.fechaCreacion.plusMinutes(15);
         this.activa = true;
+        this.liberada = false;
     }
 
     public Reserva(String ordenId, String productoId, String ubicacionId, Integer cantidad) {
@@ -33,6 +35,7 @@ public class Reserva {
         this.fechaCreacion = LocalDateTime.now();
         this.fechaExpiracion = this.fechaCreacion.plusMinutes(15);
         this.activa = true;
+        this.liberada = false;
     }
 
     public Long getId() { return id; }
@@ -51,4 +54,6 @@ public class Reserva {
     public void setFechaExpiracion(LocalDateTime fechaExpiracion) { this.fechaExpiracion = fechaExpiracion; }
     public boolean isActiva() { return activa; }
     public void setActiva(boolean activa) { this.activa = activa; }
+    public boolean isLiberada() { return liberada; }
+    public void setLiberada(boolean liberada) { this.liberada = liberada; }
 }

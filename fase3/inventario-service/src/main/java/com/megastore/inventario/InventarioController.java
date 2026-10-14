@@ -14,10 +14,12 @@ public class InventarioController {
 
     private final ProductoRepository productoRepository;
     private final StockRepository stockRepository;
+    private final ReservaRepository reservaRepository;
 
-    public InventarioController(ProductoRepository productoRepository, StockRepository stockRepository) {
+    public InventarioController(ProductoRepository productoRepository, StockRepository stockRepository, ReservaRepository reservaRepository) {
         this.productoRepository = productoRepository;
         this.stockRepository = stockRepository;
+        this.reservaRepository = reservaRepository;
     }
 
     // Tarea 3: Endpoint GET /api/inventario/productos con filtros en el backend
@@ -160,6 +162,11 @@ public class InventarioController {
         return ResponseEntity.ok(unificado);
     }
 
+    @GetMapping("/reservas")
+    public ResponseEntity<List<Reserva>> getReservas() {
+        return ResponseEntity.ok(reservaRepository.findAll());
+    }
+
     @PostMapping("/stock/ajuste")
     public ResponseEntity<?> ajustarStock(@RequestBody Map<String, Object> body) {
         String productoId = body.get("productoId") != null ? body.get("productoId").toString() : null;
@@ -188,5 +195,30 @@ public class InventarioController {
         }
 
         return ResponseEntity.notFound().build();
+    }
+
+    private static volatile boolean inventarioDeshabilitado = false;
+
+    @GetMapping("/modo")
+    public ResponseEntity<?> getModo() {
+        return ResponseEntity.ok(Map.of(
+                "deshabilitado", inventarioDeshabilitado,
+                "estadoServicio", inventarioDeshabilitado ? "DESHABILITADO" : "HABILITADO"
+        ));
+    }
+
+    @PostMapping("/modo")
+    public ResponseEntity<?> setModo(@RequestBody(required = false) Map<String, Object> body) {
+        if (body != null) {
+            if (body.containsKey("deshabilitado")) {
+                inventarioDeshabilitado = Boolean.TRUE.equals(body.get("deshabilitado"));
+            } else if (body.containsKey("falloSimulado")) {
+                inventarioDeshabilitado = Boolean.TRUE.equals(body.get("falloSimulado"));
+            }
+        }
+        return ResponseEntity.ok(Map.of(
+                "deshabilitado", inventarioDeshabilitado,
+                "estadoServicio", inventarioDeshabilitado ? "DESHABILITADO" : "HABILITADO"
+        ));
     }
 }

@@ -15,6 +15,7 @@ export const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [showForgotMsg, setShowForgotMsg] = useState(false);
   const [regSuccess, setRegSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ export const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg('');
     if (activeTab === 'login') {
       if (!email || !password) return;
       setLoading(true);
@@ -41,6 +43,7 @@ export const LoginPage = () => {
         navigate(destination);
       } catch (err) {
         console.error('Login error', err);
+        setErrorMsg(err.message || 'Credenciales inválidas. Verifica tu correo y contraseña.');
       } finally {
         setLoading(false);
       }
@@ -62,7 +65,7 @@ export const LoginPage = () => {
         }, 1200);
       } catch (err) {
         console.error('Register error', err);
-        alert(err.message || 'Error al registrarse');
+        setErrorMsg(err.message || 'Error al registrar usuario.');
       } finally {
         setLoading(false);
       }
@@ -70,16 +73,22 @@ export const LoginPage = () => {
   };
 
   const handleQuickLogin = (type) => {
+    setErrorMsg('');
     if (type === 'cliente') {
       login('cliente@megastore.com', 'Password123').then((userObj) => {
         const destination = resolveDestination(userObj, redirectUrl);
         navigate(destination);
-      });
+      }).catch(err => setErrorMsg(err.message));
+    } else if (type === 'riesgo') {
+      login('riesgo@megastore.com', 'Riesgo123').then((userObj) => {
+        const destination = resolveDestination(userObj, redirectUrl);
+        navigate(destination);
+      }).catch(err => setErrorMsg(err.message));
     } else if (type === 'admin') {
       login('admin@megastore.com', 'Admin123').then((userObj) => {
         const destination = resolveDestination(userObj, redirectUrl);
         navigate(destination);
-      });
+      }).catch(err => setErrorMsg(err.message));
     }
   };
 
@@ -100,18 +109,24 @@ export const LoginPage = () => {
           <div className="auth-tab-switcher">
             <button
               className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`}
-              onClick={() => setActiveTab('login')}
+              onClick={() => { setActiveTab('login'); setErrorMsg(''); }}
             >
               <LogIn size={16} /> Iniciar Sesión
             </button>
             <button
               className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`}
-              onClick={() => setActiveTab('register')}
+              onClick={() => { setActiveTab('register'); setErrorMsg(''); }}
             >
               <UserPlus size={16} /> Registrarse
             </button>
           </div>
         </div>
+
+        {errorMsg && (
+          <div className="status-banner-card" style={{ marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#f87171' }}>
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
         {regSuccess && (
           <div className="status-banner-card text-success" style={{ marginBottom: '1rem' }}>
@@ -241,6 +256,16 @@ export const LoginPage = () => {
           >
             <UserCheck size={18} className="icon-orange" />
             <span>Cliente Tienda</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-secondary btn-quick"
+            onClick={() => handleQuickLogin('riesgo')}
+            title="Cliente con incidencias en ERP (Score 55/100 - No apto para Crédito Propio)"
+          >
+            <ShieldCheck size={18} style={{ color: '#f87171' }} />
+            <span>Cliente Riesgo (Sin BNPL)</span>
           </button>
 
           <button

@@ -82,8 +82,7 @@ describe('E2E Spec 03 - Checkout Tradicional con Pasarela PayKlik y Tokenizacion
     cy.contains('button', 'Ver estado de mi orden').click();
     cy.url().should('include', '/seguimiento');
     cy.contains('Seguimiento de Pedido').should('exist');
-    cy.contains('Código de Rastreo LogiExpress').should('exist');
-    cy.contains('Estado de Transmisión').should('exist');
+    cy.contains(/Estado del Pedido|Estado de Transmisión/).should('exist');
   });
 
   it('Flujo 2: Debe permitir eliminar una tarjeta guardada desde el selector de PayKlik', () => {

@@ -16,6 +16,7 @@ public class OrdenesService {
     private final EventoAuditoriaRepository auditoriaRepository;
     private final CarritoService carritoService;
     private final RabbitTemplate rabbitTemplate;
+    private final CreditoService creditoService;
 
     @Value("${app.rabbitmq.exchange:sgologic.exchange}")
     private String exchangeName;
@@ -26,11 +27,13 @@ public class OrdenesService {
     public OrdenesService(OrdenRepository ordenRepository,
                           EventoAuditoriaRepository auditoriaRepository,
                           CarritoService carritoService,
-                          RabbitTemplate rabbitTemplate) {
+                          RabbitTemplate rabbitTemplate,
+                          CreditoService creditoService) {
         this.ordenRepository = ordenRepository;
         this.auditoriaRepository = auditoriaRepository;
         this.carritoService = carritoService;
         this.rabbitTemplate = rabbitTemplate;
+        this.creditoService = creditoService;
     }
 
     @Transactional
@@ -45,7 +48,7 @@ public class OrdenesService {
         orden.setEstado("CREADA");
         orden.setCodigoRastreo("LEX-" + (100000 + new Random().nextInt(900000)) + "-GT");
         orden.setMetodoPago(request.getMetodoPago() != null ? request.getMetodoPago() : "PayKlik (Tarjeta)");
-        orden.setMetodoEntrega(request.getMetodoEntrega() != null ? request.getMetodoEntrega() : "Envío a Domicilio");
+        orden.setMetodoEntrega(request.getMetodoEntrega() != null ? request.getMetodoEntrega() : "Envio a Domicilio");
         orden.setDireccion(request.getDireccion() != null ? request.getDireccion() : "Ciudad de Guatemala");
 
         BigDecimal subtotal = BigDecimal.ZERO;
@@ -61,13 +64,34 @@ public class OrdenesService {
         }
 
         BigDecimal impuestos = subtotal.multiply(new BigDecimal("0.12")).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal envio = "domicilio".equalsIgnoreCase(request.getMetodoEntrega()) ? new BigDecimal("15.00") : BigDecimal.ZERO;
+        boolean esDomicilio = request.getMetodoEntrega() == null ||
+                request.getMetodoEntrega().toLowerCase().contains("domicilio");
+        BigDecimal envio = esDomicilio ? new BigDecimal("15.00") : BigDecimal.ZERO;
         BigDecimal total = subtotal.add(impuestos).add(envio).setScale(2, RoundingMode.HALF_UP);
 
         orden.setSubtotal(subtotal);
         orden.setImpuestos(impuestos);
         orden.setEnvio(envio);
         orden.setTotal(total);
+
+        String mpLower = orden.getMetodoPago() != null ? orden.getMetodoPago().toLowerCase() : "";
+        boolean esCreditoPropio = !mpLower.contains("payklik") && !mpLower.contains("tarjeta") && (
+                "credito_propio".equalsIgnoreCase(orden.getMetodoPago()) ||
+                "CREDITO_PROPIO_30D".equalsIgnoreCase(orden.getMetodoPago()) ||
+                mpLower.contains("credito propio") ||
+                mpLower.contains("crédito propio") ||
+                mpLower.contains("30 dias") ||
+                mpLower.contains("30 días") ||
+                mpLower.contains("bnpl")
+        );
+
+        if (esCreditoPropio && creditoService != null) {
+            Map<String, Object> eval = creditoService.evaluarCredito(orden.getClienteId(), total);
+            if (!Boolean.TRUE.equals(eval.get("aprobado"))) {
+                String motivo = eval.get("mensaje") != null ? eval.get("mensaje").toString() : "No califica para Credito Propio";
+                throw new IllegalArgumentException("Solicitud de Credito Propio rechazada: " + motivo);
+            }
+        }
 
         // Save to Postgres
         Orden guardada = ordenRepository.save(orden);
@@ -99,12 +123,6 @@ public class OrdenesService {
             evento.put("direccionDestino", guardada.getDireccion());
             evento.put("estado", guardada.getEstado());
             evento.put("metodoPago", guardada.getMetodoPago() != null ? guardada.getMetodoPago() : "payklik");
-            boolean esCreditoPropio = guardada.getMetodoPago() != null && (
-                    "credito_propio".equalsIgnoreCase(guardada.getMetodoPago()) ||
-                    "CREDITO_PROPIO_30D".equalsIgnoreCase(guardada.getMetodoPago()) ||
-                    guardada.getMetodoPago().toLowerCase().contains("credito") ||
-                    guardada.getMetodoPago().toLowerCase().contains("bnpl")
-            );
             evento.put("plazoDias", esCreditoPropio ? 30 : 0);
             evento.put("codigoRastreo", guardada.getCodigoRastreo());
             evento.put("fecha", guardada.getFechaCreacion().toString());
@@ -144,6 +162,12 @@ public class OrdenesService {
         Optional<Orden> opt = ordenRepository.findById(id);
         if (opt.isPresent()) {
             Orden orden = opt.get();
+            if ("ENTREGADA".equalsIgnoreCase(orden.getEstado())) {
+                throw new IllegalStateException("No se puede cancelar una orden que ya fue entregada al cliente.");
+            }
+            if ("CANCELADA".equalsIgnoreCase(orden.getEstado())) {
+                return Optional.of(orden);
+            }
             orden.setEstado("CANCELADA");
             Orden guardada = ordenRepository.save(orden);
 
@@ -179,8 +203,17 @@ public class OrdenesService {
         try {
             String ordenId = evento.containsKey("ordenId") ? (String) evento.get("ordenId") : (String) evento.get("id");
             if (ordenId != null) {
-                String nuevoEstado = evento.containsKey("autorizacionSat") ? "EN_PREPARACION" : 
-                    (evento.containsKey("estado") ? evento.get("estado").toString() : "PROCESANDO");
+                String estadoEvento = evento.containsKey("estado") && evento.get("estado") != null
+                        ? evento.get("estado").toString()
+                        : "PROCESANDO";
+                String nuevoEstado;
+                if (evento.containsKey("autorizacionSat")) {
+                    nuevoEstado = "EN_PREPARACION";
+                } else if ("PAGADO".equalsIgnoreCase(estadoEvento) || "PAGADO_BNPL".equalsIgnoreCase(estadoEvento)) {
+                    nuevoEstado = "PAGADA";
+                } else {
+                    nuevoEstado = estadoEvento;
+                }
                 actualizarEstadoOrden(ordenId, nuevoEstado);
             }
         } catch (Exception e) {
@@ -222,5 +255,15 @@ public class OrdenesService {
 
     public List<EventoAuditoria> listarIncidencias() {
         return auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("INCIDENCIA");
+    }
+
+    public Optional<EventoAuditoria> responderIncidencia(Long incidenciaId, String respuesta) {
+        return auditoriaRepository.findById(incidenciaId).map(inc -> {
+            inc.setRespuesta(respuesta != null ? respuesta.trim() : "");
+            inc.setEstado("ATENDIDA");
+            EventoAuditoria guardada = auditoriaRepository.save(inc);
+            System.out.println("[AUDITORIA ATENCION] Incidencia " + incidenciaId + " respondida: " + respuesta);
+            return guardada;
+        });
     }
 }

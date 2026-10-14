@@ -144,15 +144,16 @@ namespace NotificacionesService
                   "PAGADO_BNPL".Equals(estado, StringComparison.OrdinalIgnoreCase))))
             {
                 notification.Tipo = "CREDITO";
+                string refOrden = !string.IsNullOrEmpty(ordenId) ? $" para la orden {ordenId}" : " en evaluación previa de Checkout";
                 if (routingKey.Contains("rechazado", StringComparison.OrdinalIgnoreCase))
                 {
                     notification.Titulo = "Crédito Propio No Aprobado";
-                    notification.Mensaje = $"La evaluación de Crédito Propio para la orden {ordenId ?? ""} no alcanzó el score requerido. Puedes pagar con PayKlik.";
+                    notification.Mensaje = $"La evaluación de Crédito Propio{refOrden} no alcanzó el score requerido. Puedes pagar con PayKlik.";
                 }
                 else
                 {
                     notification.Titulo = "Crédito Propio Aprobado (30 Días)";
-                    notification.Mensaje = $"¡Tu Crédito Propio a 30 días sin intereses ha sido aprobado para la orden {ordenId ?? ""}! {(!string.IsNullOrEmpty(monto) ? $"(Monto financiado: Q{monto})" : "")}";
+                    notification.Mensaje = $"Tu Crédito Propio a 30 días sin intereses ha sido aprobado{refOrden}. {(!string.IsNullOrEmpty(monto) ? $"(Monto financiado: Q{monto})" : "")}".Trim();
                 }
             }
             // 2. Eventos de Tracking / Logística
@@ -163,12 +164,20 @@ namespace NotificacionesService
                 notification.Titulo = "Actualización de Rastreo en Tiempo Real";
                 notification.Mensaje = $"Tu orden {ordenId ?? ""} avanzó a estado: '{estado ?? "EN_TRANSITO"}'. {(!string.IsNullOrEmpty(codigoRastreo) ? $"Código de rastreo: {codigoRastreo}" : "")}";
             }
-            // 3. Eventos de Pago Tradicional
+            // 3. Eventos de Pago Tradicional y Contingencia
             else if (routingKey.StartsWith("pago.", StringComparison.OrdinalIgnoreCase))
             {
                 notification.Tipo = "PAGO";
-                notification.Titulo = "Pago Confirmado";
-                notification.Mensaje = $"El pago de la orden {ordenId ?? ""} por Q{monto ?? "0.00"} ha sido procesado exitosamente.";
+                if (routingKey.Contains("contingencia", StringComparison.OrdinalIgnoreCase) || "PAGO_EN_CONTINGENCIA".Equals(estado, StringComparison.OrdinalIgnoreCase))
+                {
+                    notification.Titulo = "Pago Encolado en Contingencia (DLQ)";
+                    notification.Mensaje = $"Pasarela PayKlik no disponible. El cobro de la orden {ordenId ?? ""} por Q{monto ?? "0.00"} fue resguardado en RabbitMQ DLQ para reintento seguro.";
+                }
+                else
+                {
+                    notification.Titulo = "Pago Confirmado";
+                    notification.Mensaje = $"El pago de la orden {ordenId ?? ""} por Q{monto ?? "0.00"} ha sido procesado exitosamente.";
+                }
             }
             // 4. Eventos de Inventario
             else if (routingKey.StartsWith("inventario.", StringComparison.OrdinalIgnoreCase))

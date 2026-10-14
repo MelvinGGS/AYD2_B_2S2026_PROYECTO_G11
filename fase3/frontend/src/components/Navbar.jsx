@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Search, User, LogOut, LayoutDashboard, Shield, Package, Store } from 'lucide-react';
+import { ShoppingCart, Search, User, LogOut, LayoutDashboard, Shield, Package, Store, HelpCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { ProfileModal } from './ProfileModal';
@@ -57,19 +57,47 @@ export const Navbar = ({ hideSearch = false, hideLinks = false }) => {
               <Link to="/catalogo?ofertas=true" className="nav-link nav-ofertas">
                 Ofertas
               </Link>
-              <Link to="/seguimiento" className="nav-link">
-                <Package size={16} /> Mis Pedidos
-              </Link>
+              {user && (
+                <Link to="/seguimiento" className="nav-link">
+                  <Package size={16} /> Mis Pedidos
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-help-modal'))}
+                className="nav-link"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--orange-primary)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem'
+                }}
+                title="Centro de ayuda y atención al cliente"
+              >
+                <HelpCircle size={16} />
+                <span>¿Necesitas ayuda?</span>
+              </button>
             </nav>
           )}
 
           {/* Action Icons & User */}
           <div className="navbar-actions">
             {/* Cart Icon */}
-            <Link to="/carrito" className="icon-btn cart-btn" title="Ver Carrito">
-              <ShoppingCart size={22} />
-              {totalCount > 0 && <span className="cart-badge">{totalCount}</span>}
-            </Link>
+            {user ? (
+              <Link to="/carrito" className="icon-btn cart-btn" title="Ver Carrito">
+                <ShoppingCart size={22} />
+                {totalCount > 0 && <span className="cart-badge">{totalCount}</span>}
+              </Link>
+            ) : (
+              <Link to="/login?redirect=/carrito" className="icon-btn cart-btn" title="Iniciar sesión para acceder al carrito">
+                <ShoppingCart size={22} />
+              </Link>
+            )}
 
             {/* User Auth Info */}
             {user ? (

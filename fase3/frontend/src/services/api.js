@@ -17,6 +17,18 @@ export const FACTURACION_API = (typeof process !== 'undefined' && process.env?.R
   ? process.env.REACT_APP_FACTURACION_API
   : (import.meta.env?.VITE_FACTURACION_API || `http://${API_HOST}:8084/api/facturas`);
 
+export const PAGOS_API = (typeof process !== 'undefined' && process.env?.REACT_APP_PAGOS_API)
+  ? process.env.REACT_APP_PAGOS_API
+  : (import.meta.env?.VITE_PAGOS_API || `http://${API_HOST}:8083/api`);
+
+export const LOGISTICA_API = (typeof process !== 'undefined' && process.env?.REACT_APP_LOGISTICA_API)
+  ? process.env.REACT_APP_LOGISTICA_API
+  : (import.meta.env?.VITE_LOGISTICA_API || `http://${API_HOST}:8085/api/logistica`);
+
+export const NOTIFICACIONES_API = (typeof process !== 'undefined' && process.env?.REACT_APP_NOTIFICACIONES_API)
+  ? process.env.REACT_APP_NOTIFICACIONES_API
+  : (import.meta.env?.VITE_NOTIFICACIONES_API || `http://${API_HOST}:8086/api/notificaciones`);
+
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 800) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -192,23 +204,24 @@ export const getCategoryImage = (cat = '') => {
 };
 
 export const getProductos = async (filtrosOQuery = '', categoriaParam = '') => {
-  try {
-    let q = '';
-    let categoria = '';
-    let ofertas = false;
-    let maxPrecio = '';
-    let enStock = false;
+  let q = '';
+  let categoria = '';
+  let ofertas = false;
+  let maxPrecio = '';
+  let enStock = false;
 
-    if (typeof filtrosOQuery === 'object' && filtrosOQuery !== null) {
-      q = filtrosOQuery.q || '';
-      categoria = filtrosOQuery.categoria || '';
-      ofertas = !!filtrosOQuery.ofertas;
-      maxPrecio = filtrosOQuery.maxPrecio || '';
-      enStock = !!filtrosOQuery.enStock;
-    } else {
-      q = filtrosOQuery || '';
-      categoria = categoriaParam || '';
-    }
+  if (typeof filtrosOQuery === 'object' && filtrosOQuery !== null) {
+    q = filtrosOQuery.q || '';
+    categoria = filtrosOQuery.categoria || '';
+    ofertas = !!filtrosOQuery.ofertas;
+    maxPrecio = filtrosOQuery.maxPrecio || '';
+    enStock = !!filtrosOQuery.enStock;
+  } else {
+    q = filtrosOQuery || '';
+    categoria = categoriaParam || '';
+  }
+
+  try {
 
     const params = new URLSearchParams();
     if (q && q.trim()) params.append('q', q.trim());
@@ -249,6 +262,7 @@ export const getProductos = async (filtrosOQuery = '', categoriaParam = '') => {
     const term = q.toLowerCase();
     result = result.filter(p => p.nombre.toLowerCase().includes(term) || p.descripcion.toLowerCase().includes(term));
   }
+  result.isOffline = true;
   return result;
 };
 
@@ -266,28 +280,8 @@ export const loginUser = async (email, password) => {
     throw new Error(err.error || 'Credenciales invalidas');
   } catch (e) {
     console.error('Error de autenticacion:', e);
-    // Modo offline resiliente para pruebas y demostracion sin backend levantado
-    if (e.message && (e.message.includes('fetch') || e.name === 'TypeError' || e.message === 'Failed to fetch')) {
-      if (email === 'admin@megastore.com' || (email && email.includes('admin'))) {
-        return {
-          id: 99,
-          nombre: 'Administrador SGO-Logic',
-          email: 'admin@megastore.com',
-          role: 'admin',
-          token: 'jwt-admin-token-fase3'
-        };
-      }
-      return {
-        id: 1,
-        nombre: 'Melvin Garcia',
-        email: email || 'cliente@megastore.com',
-        role: 'cliente',
-        creditScore: 85,
-        token: 'jwt-cliente-token-fase3',
-        tarjetas: [
-          { id: 'card-1', brand: 'Visa', last4: '4242', exp: '12/28' }
-        ]
-      };
+    if (e.message && (e.message.includes('fetch') || e.name === 'TypeError' || e.message === 'Failed to fetch' || e.name === 'AbortError')) {
+      throw new Error('El servicio de autenticación y clientes se encuentra temporalmente fuera de línea. Por favor intenta de nuevo en unos momentos.');
     }
     throw e;
   }
@@ -433,25 +427,47 @@ export const evaluarCredito = async (clienteId, monto) => {
   };
 };
 
+export const consultarDisponibilidadProducto = async (productoId) => {
+  if (!productoId) return null;
+  try {
+    let res = await fetchWithTimeout(`${INVENTARIO_API}/disponibilidad/${encodeURIComponent(productoId)}`, {}, 2000);
+    if (!res.ok && res.status === 404 && typeof productoId === 'string') {
+      res = await fetchWithTimeout(`${INVENTARIO_API}/disponibilidad/${encodeURIComponent(productoId.toUpperCase())}`, {}, 2000);
+    }
+    if (res.ok) {
+      const stockData = await res.json();
+      const totalDisponible = Array.isArray(stockData)
+        ? stockData.reduce((sum, u) => sum + (Number(u.cantidadDisponible) || 0), 0)
+        : 0;
+      return { totalDisponible, ubicaciones: stockData };
+    }
+  } catch (e) {
+    console.warn(`Error al consultar disponibilidad para ${productoId}:`, e.message);
+  }
+  return null;
+};
+
 export const crearOrden = async (carrito, shippingInfo, paymentInfo) => {
-  // Pre-validar disponibilidad de inventario antes de crear la orden
+  // Pre-validar disponibilidad de inventario de forma estricta antes de crear la orden
   for (const item of carrito) {
     try {
-      const res = await fetchWithTimeout(`${INVENTARIO_API}/disponibilidad/${item.id}`, {}, 500);
-      if (res.ok) {
-        const stockData = await res.json();
-        const totalDisp = stockData.reduce((sum, u) => sum + u.cantidadDisponible, 0);
-        if (totalDisp < item.cantidad) {
-          throw new Error(`Inventario insuficiente para "${item.nombre}". Disponible: ${totalDisp}, solicitado: ${item.cantidad}.`);
+      const disp = await consultarDisponibilidadProducto(item.id);
+      if (disp !== null) {
+        if (disp.totalDisponible < item.cantidad) {
+          const err = new Error(`Inventario insuficiente para "${item.nombre}". Stock disponible en bodega: ${disp.totalDisponible} uds, solicitado: ${item.cantidad} uds. Por favor ajusta la cantidad.`);
+          err.stockIssue = {
+            productoId: item.id,
+            nombre: item.nombre,
+            disponible: disp.totalDisponible,
+            solicitado: item.cantidad
+          };
+          throw err;
         }
-      } else if (res.status === 404) {
-        throw new Error(`Producto "${item.nombre}" no encontrado en inventario.`);
       }
     } catch (e) {
-      if (e.message.includes('Inventario insuficiente') || e.message.includes('no encontrado')) {
+      if (e.message.includes('Inventario insuficiente')) {
         throw e; // Abortar la creación de la orden
       }
-      // Si el servicio de inventario está caído, dejamos pasar (el backend validará asincrónicamente)
       console.warn('No se pudo pre-validar inventario:', e.message);
     }
   }
@@ -496,34 +512,8 @@ export const crearOrden = async (carrito, shippingInfo, paymentInfo) => {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.error || 'Error al procesar la orden en el servidor');
   } catch (err) {
-    if (err.message && (err.message.includes('fetch') || err.name === 'TypeError' || err.message === 'Failed to fetch')) {
-      const simulatedId = `ORD-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-      const sub = +(carrito.reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.cantidad) || 1), 0).toFixed(2));
-      const imp = +(sub * 0.12).toFixed(2);
-      const env = shippingInfo.tipoEntrega === 'domicilio' ? 15.00 : 0.00;
-      const tot = +(sub + imp + env).toFixed(2);
-
-      const fallbackOrder = {
-        id: simulatedId,
-        clienteNombre: payload.clienteNombre,
-        cliente: payload.clienteNombre,
-        canal: payload.canal,
-        metodoPago: payload.metodoPago,
-        metodoEntrega: payload.metodoEntrega,
-        direccion: payload.direccion,
-        subtotal: sub,
-        impuestos: imp,
-        envio: env,
-        total: tot,
-        estado: 'CREADA',
-        fechaCreacion: new Date().toISOString(),
-        codigoRastreo: `LEX-${Math.floor(100000 + Math.random() * 900000)}-GT`,
-        items: payload.items
-      };
-      const existing = JSON.parse(localStorage.getItem('sgologic_sim_orders') || '[]');
-      existing.unshift(fallbackOrder);
-      localStorage.setItem('sgologic_sim_orders', JSON.stringify(existing));
-      return normalizeOrder(fallbackOrder);
+    if (err.message && (err.message.includes('fetch') || err.name === 'TypeError' || err.message === 'Failed to fetch' || err.name === 'AbortError')) {
+      throw new Error('El servicio de procesamiento de órdenes se encuentra temporalmente fuera de línea. Por favor intenta de nuevo en unos momentos.');
     }
     throw err;
   }
@@ -532,53 +522,32 @@ export const crearOrden = async (carrito, shippingInfo, paymentInfo) => {
 export const getOrden = async (ordenId) => {
   if (!ordenId) throw new Error('ID de orden no especificado');
   try {
-    const res = await fetch(`${ORDENES_API}/ordenes/${ordenId}`);
+    const res = await fetchWithTimeout(`${ORDENES_API}/ordenes/${encodeURIComponent(ordenId)}`, {}, 1500);
     if (res.ok) {
       const data = await res.json();
       return normalizeOrder(data);
     }
+    if (res.status === 404) {
+      return null;
+    }
   } catch (e) {
     console.warn('Backend offline al obtener orden:', e);
+    throw new Error('El servicio de órdenes se encuentra temporalmente fuera de línea.');
   }
-
-  const existing = JSON.parse(localStorage.getItem('sgologic_sim_orders') || '[]');
-  const found = existing.find(o => o.id === ordenId) || MOCK_ORDERS.find(o => o.id === ordenId);
-  if (found) return normalizeOrder(found);
-
-  return normalizeOrder({
-    id: ordenId,
-    fechaCreacion: new Date().toISOString(),
-    clienteNombre: 'Melvin Garcia',
-    cliente: 'Melvin Garcia',
-    canal: 'Web Store',
-    estado: 'CREADA',
-    codigoRastreo: 'LEX-849204-GT',
-    metodoPago: ordenId.includes('BNPL') || ordenId.includes('CRED') ? 'Credito Propio (Paga en 30 dias)' : 'PayKlik (Tarjeta **** 4242)',
-    metodoEntrega: 'Envio a Domicilio',
-    direccion: 'Zona 10, Ciudad de Guatemala',
-    subtotal: 189.99,
-    impuestos: 22.80,
-    envio: 15.00,
-    total: 227.79,
-    items: [
-      { id: 'prod-004', nombre: 'Smartwatch Deportivo V3 Pro AMOLED', precio: 189.99, cantidad: 1 }
-    ]
-  });
+  return null;
 };
 
 export const getOrdenes = async () => {
   try {
-    const res = await fetch(`${ORDENES_API}/ordenes`);
+    const res = await fetchWithTimeout(`${ORDENES_API}/ordenes`, {}, 1500);
     if (res.ok) {
       const data = await res.json();
       return Array.isArray(data) ? data.map(normalizeOrder) : [];
     }
   } catch (e) {
-    console.warn('Backend ordenes offline, usando registro local:', e);
+    console.warn('Backend ordenes offline:', e);
   }
-  const existing = JSON.parse(localStorage.getItem('sgologic_sim_orders') || '[]');
-  const combined = [...existing, ...MOCK_ORDERS];
-  return combined.map(normalizeOrder);
+  return [];
 };
 
 export const updateEstadoOrden = async (ordenId, nuevoEstado) => {
@@ -613,48 +582,159 @@ export const updateEstadoOrden = async (ordenId, nuevoEstado) => {
   return normalizeOrder({ id: ordenId, estado: nuevoEstado, timeline: buildTimeline(nuevoEstado) });
 };
 
-export const getDashboardMetrics = async () => {
+const pingServiceHealth = async (nombre, url, checkFn = null, allow404 = false) => {
+  const start = Date.now();
   try {
-    const res = await fetch(`${ORDENES_API}/ordenes`);
-    if (res.ok) {
-      const rawOrders = await res.json();
+    const res = await fetchWithTimeout(url, {}, 700);
+    const latencia = `${Math.max(1, Date.now() - start)}ms`;
+    if (res.ok || (allow404 && res.status === 404)) {
+      if (checkFn && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const custom = checkFn(data, latencia);
+        if (custom) return custom;
+      }
+      return { nombre, estado: 'Operativo', statusType: 'success', latencia };
+    }
+    return { nombre, estado: 'Fuera de Línea', statusType: 'error', latencia };
+  } catch (err) {
+    return { nombre, estado: 'Fuera de Línea', statusType: 'error', latencia: 'Offline' };
+  }
+};
+
+export const getModoLogistica = () => {
+  try {
+    const saved = localStorage.getItem('sgologic_modo_logistica');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoLogistica = (deshabilitado) => {
+  const data = { deshabilitado, estadoServicio: deshabilitado ? 'DESHABILITADO' : 'HABILITADO' };
+  try {
+    localStorage.setItem('sgologic_modo_logistica', JSON.stringify(data));
+  } catch (e) {}
+  return data;
+};
+
+export const getModoNotificaciones = () => {
+  try {
+    const saved = localStorage.getItem('sgologic_modo_notificaciones');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoNotificaciones = (deshabilitado) => {
+  const data = { deshabilitado, estadoServicio: deshabilitado ? 'DESHABILITADO' : 'HABILITADO' };
+  try {
+    localStorage.setItem('sgologic_modo_notificaciones', JSON.stringify(data));
+  } catch (e) {}
+  return data;
+};
+
+export const getDashboardMetrics = async () => {
+  const modoLogLocal = getModoLogistica();
+  const modoNotLocal = getModoNotificaciones();
+  let sistemasList = [
+    { nombre: 'Órdenes y Clientes', estado: 'Verificando...', statusType: 'info', latencia: '-' },
+    { nombre: 'Inventario Omnicanal', estado: 'Verificando...', statusType: 'info', latencia: '-' },
+    { nombre: 'Pasarela PayKlik', estado: 'Verificando...', statusType: 'info', latencia: '-' },
+    { nombre: 'SAT Facturación XML', estado: 'Verificando...', statusType: 'info', latencia: '-' },
+    { nombre: 'LogiExpress Courier', estado: 'Verificando...', statusType: 'info', latencia: '-' },
+    { nombre: 'Bus Notificaciones', estado: 'Verificando...', statusType: 'info', latencia: '-' }
+  ];
+
+  try {
+    const [resOrdenes, ordenesHealth, invHealth, payklikHealth, satHealth, logiHealth, mqHealth, pagosContingencia] = await Promise.all([
+      fetchWithTimeout(`${ORDENES_API}/ordenes`, {}, 1200).catch(() => null),
+      pingServiceHealth('Órdenes y Clientes', `${ORDENES_API}/ordenes`),
+      pingServiceHealth('Inventario Omnicanal', `${INVENTARIO_API}/modo`, (data, latencia) => {
+        if (data && data.deshabilitado) {
+          return { nombre: 'Inventario Omnicanal', estado: 'Deshabilitado (Auditoría)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      pingServiceHealth('Pasarela PayKlik', `${PAGOS_API}/payklik/modo`, (data, latencia) => {
+        if (data && (data.deshabilitado || data.falloSimulado)) {
+          return { nombre: 'Pasarela PayKlik', estado: 'Deshabilitado (Contingencia)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      pingServiceHealth('SAT Facturación XML', `http://${API_HOST}:8084/api/sat/modo`, (data, latencia) => {
+        let isDeshab = data && data.deshabilitado;
+        try {
+          const cached = localStorage.getItem('sgologic_modo_sat');
+          if (cached && JSON.parse(cached).deshabilitado) isDeshab = true;
+        } catch (e) {}
+        if (isDeshab) {
+          return { nombre: 'SAT Facturación XML', estado: 'Deshabilitado (Contingencia)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      pingServiceHealth('LogiExpress Courier', `http://${API_HOST}:8085/`, (_data, latencia) => {
+        if (modoLogLocal.deshabilitado) {
+          return { nombre: 'LogiExpress Courier', estado: 'Deshabilitado (Despacho en Espera)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      pingServiceHealth('Bus Notificaciones', `${NOTIFICACIONES_API}/health`, (_data, latencia) => {
+        if (modoNotLocal.deshabilitado) {
+          return { nombre: 'Bus Notificaciones', estado: 'Deshabilitado (Modo Silencioso)', statusType: 'error', latencia };
+        }
+        return null;
+      }),
+      fetchWithTimeout(`${PAGOS_API}/pagos/contingencia`, {}, 800).then(r => r.ok ? r.json() : []).catch(() => [])
+    ]);
+
+    sistemasList = [ordenesHealth, invHealth, payklikHealth, satHealth, logiHealth, mqHealth];
+
+    if (resOrdenes && resOrdenes.ok) {
+      const rawOrders = await resOrdenes.json();
       const realOrders = Array.isArray(rawOrders) ? rawOrders.map(normalizeOrder) : [];
-      const totalVentas = realOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      // Solo computar ventas de ordenes confirmadas o en curso (excluir canceladas e insuficientes)
+      const ordenesEfectivas = realOrders.filter(o => o.estado !== 'CANCELADA' && o.estado !== 'INVENTARIO_INSUFICIENTE');
+      const totalVentas = ordenesEfectivas.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      
+      // Pendientes por despachar solo cuenta ordenes activas en cola de despacho
+      const ordenesPendientes = realOrders.filter(o => 
+        o.estado === 'CREADA' || 
+        o.estado === 'PAGADA' || 
+        o.estado === 'FACTURADA' || 
+        o.estado === 'EN_PREPARACION' || 
+        o.estado === 'EN_TRANSITO' ||
+        o.estado === 'PAGO_EN_CONTINGENCIA'
+      ).length;
+
+      const serviciosCaidos = sistemasList.filter(s => s.statusType === 'error').length;
+      const ordenesEnContingencia = realOrders.filter(o => o.estado === 'PAGO_EN_CONTINGENCIA').length;
+      const alertasActivas = serviciosCaidos + ordenesEnContingencia;
+
       return {
         totalOrdenesHoy: realOrders.length,
-        ordenesIncremento: realOrders.length > 0 ? `+${realOrders.length} ordenes registradas` : '0 hoy',
-        ordenesPendientes: realOrders.filter(o => o.estado !== 'ENTREGADA').length,
-        alertasActivas: 0,
+        ordenesIncremento: realOrders.length > 0 ? `+${realOrders.length} órdenes registradas` : '0 hoy',
+        ordenesPendientes,
+        alertasActivas,
         ingresosHoy: 'Q' + totalVentas.toFixed(2),
-        sistemas: [
-          { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '15ms' },
-          { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '45ms' },
-          { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '20ms' },
-          { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
-        ],
-        ultimasOrdenes: realOrders
+        sistemas: sistemasList,
+        ultimasOrdenes: realOrders,
+        ordenesOffline: false
       };
     }
   } catch (e) {
     console.warn('Backend Ordenes offline:', e);
   }
 
-  const existing = JSON.parse(localStorage.getItem('sgologic_sim_orders') || '[]');
-  const allOrders = [...existing, ...MOCK_ORDERS].map(normalizeOrder);
-  const totalVentas = allOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const serviciosCaidos = sistemasList.filter(s => s.statusType === 'error').length;
   return {
-    totalOrdenesHoy: allOrders.length,
-    ordenesIncremento: `+${allOrders.length} órdenes registradas`,
-    ordenesPendientes: allOrders.filter(o => o.estado !== 'ENTREGADA').length,
-    alertasActivas: 0,
-    ingresosHoy: 'Q' + totalVentas.toFixed(2),
-    sistemas: [
-      { nombre: 'PayKlik API', estado: 'Operativo', statusType: 'success', latencia: '15ms' },
-      { nombre: 'SAT Facturación XML', estado: 'Operativo', statusType: 'success', latencia: '45ms' },
-      { nombre: 'LogiExpress API', estado: 'Operativo', statusType: 'success', latencia: '20ms' },
-      { nombre: 'RabbitMQ Bus Eventos', estado: 'Operativo', statusType: 'success', latencia: '2ms' }
-    ],
-    ultimasOrdenes: allOrders
+    totalOrdenesHoy: 0,
+    ordenesIncremento: 'Servicio fuera de línea',
+    ordenesPendientes: 0,
+    alertasActivas: serviciosCaidos > 0 ? serviciosCaidos : 1,
+    ingresosHoy: 'Q0.00',
+    sistemas: sistemasList,
+    ultimasOrdenes: [],
+    ordenesOffline: true
   };
 };
 
@@ -662,18 +742,30 @@ function buildTimeline(estadoActual) {
   const e = estadoActual || 'CREADA';
   const isFinalizada = e === 'ENTREGADA';
   const isError = e === 'INVENTARIO_INSUFICIENTE' || e === 'CANCELADA';
+  const isContingencia = e === 'PAGO_EN_CONTINGENCIA';
 
   if (isError) {
     return [
       { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: false },
-      { estado: e, titulo: 'Cancelada', desc: 'Orden cancelada por falta de inventario o pago fallido.', fecha: 'Cancelado', completado: false, activo: true, statusType: 'error' }
+      { estado: e, titulo: e === 'INVENTARIO_INSUFICIENTE' ? 'Sin Stock' : 'Cancelada', desc: e === 'INVENTARIO_INSUFICIENTE' ? 'Orden detenida por falta de stock disponible.' : 'Orden cancelada y stock liberado en almacén.', fecha: 'Cancelado', completado: false, activo: true, statusType: 'error' }
+    ];
+  }
+
+  if (isContingencia) {
+    return [
+      { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado y stock reservado.', fecha: 'Confirmado', completado: true, activo: false },
+      { estado: 'PAGO_EN_CONTINGENCIA', titulo: 'Pago en Verificación', desc: 'Validación de cobro en proceso. Tu orden y existencias han sido reservadas.', fecha: 'En proceso', completado: false, activo: true, statusType: 'warning' },
+      { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Pendiente de confirmación de cobro.', fecha: 'En espera', completado: false, activo: false },
+      { estado: 'EN_PREPARACION', titulo: 'En preparación', desc: 'Pendiente de liberación financiera.', fecha: 'En espera', completado: false, activo: false },
+      { estado: 'EN_TRANSITO', titulo: 'En tránsito', desc: 'Despacho con LogiExpress.', fecha: 'En espera', completado: false, activo: false },
+      { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'En espera', completado: false, activo: false }
     ];
   }
 
   return [
     { estado: 'CREADA', titulo: 'Creada', desc: 'Pedido registrado en SGO-Logic.', fecha: 'Reciente', completado: true, activo: !isFinalizada && e === 'CREADA' },
-    { estado: 'PAGADA', titulo: 'Pagada', desc: 'Pago procesado por pasarela PayKlik.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: !isFinalizada && e === 'PAGADA' },
-    { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Comprobante fiscal XML emitido.', fecha: 'Facturado', completado: ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'FACTURADA' },
+    { estado: 'PAGADA', titulo: 'Pagada', desc: 'Transacción financiera autorizada.', fecha: 'Confirmado', completado: e !== 'CREADA', activo: !isFinalizada && e === 'PAGADA' },
+    { estado: 'FACTURADA', titulo: 'Facturada', desc: 'Comprobante fiscal XML emitido ante SAT.', fecha: 'Facturado', completado: ['FACTURADA', 'EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'FACTURADA' },
     { estado: 'EN_PREPARACION', titulo: 'En preparación', desc: 'Empaquetado en centro logístico.', fecha: 'Empaquetando', completado: ['EN_PREPARACION', 'EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'EN_PREPARACION' },
     { estado: 'EN_TRANSITO', titulo: 'En tránsito', desc: 'Despachado con LogiExpress.', fecha: 'En camino', completado: ['EN_TRANSITO', 'ENTREGADA'].includes(e), activo: !isFinalizada && e === 'EN_TRANSITO' },
     { estado: 'ENTREGADA', titulo: 'Entregada', desc: 'Recibido por el cliente.', fecha: 'Finalizado', completado: e === 'ENTREGADA', activo: false }
@@ -708,6 +800,35 @@ export const getIncidencias = async () => {
   return [];
 };
 
+export const responderIncidenciaAdmin = async (incidenciaId, respuesta) => {
+  try {
+    const res = await fetch(`${ORDENES_API}/ordenes/incidencias/${incidenciaId}/responder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ respuesta })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Error al responder incidencia en backend:', e);
+  }
+  return null;
+};
+
+export const getIncidenciasOrden = async (ordenId) => {
+  if (!ordenId) return [];
+  try {
+    const list = await getIncidencias();
+    if (Array.isArray(list)) {
+      return list.filter(inc => String(inc.ordenId).trim().toLowerCase() === String(ordenId).trim().toLowerCase());
+    }
+  } catch (e) {
+    console.warn('Error al obtener incidencias para orden:', e);
+  }
+  return [];
+};
+
 export const cancelarOrdenCliente = async (ordenId) => {
   try {
     const res = await fetch(`${ORDENES_API}/ordenes/${encodeURIComponent(ordenId)}/cancelar`, {
@@ -718,34 +839,235 @@ export const cancelarOrdenCliente = async (ordenId) => {
       const data = await res.json();
       return normalizeOrder(data);
     }
+    const err = await res.json().catch(() => ({}));
+    if (err.error) throw new Error(err.error);
   } catch (e) {
+    if (e.message && e.message.includes('entregada')) {
+      throw e;
+    }
     console.warn('Backend offline al cancelar orden:', e);
   }
   return updateEstadoOrden(ordenId, 'CANCELADA');
 };
 
-export const abonarCreditoCliente = async (clienteId, monto) => {
+export const getEstadoCreditoCliente = async (clienteId) => {
   try {
-    const res = await fetch(`${ORDENES_API}/credito/abono`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clienteId: String(clienteId || '1'),
-        monto: Number(monto) || 0
-      })
-    });
+    const res = await fetchWithTimeout(`${ORDENES_API}/credito/estado/${encodeURIComponent(clienteId || '1')}`, {}, 800);
     if (res.ok) {
       return await res.json();
     }
   } catch (e) {
+    console.warn('No se pudo consultar estado crediticio en backend:', e.message);
+  }
+  return evaluarCredito(clienteId, 100);
+};
+
+export const abonarCreditoCliente = async (clienteId, monto, ordenId = null) => {
+  try {
+    const payload = {
+      clienteId: String(clienteId || '1'),
+      monto: Number(monto) || 0
+    };
+    if (ordenId) payload.ordenId = ordenId;
+
+    const res = await fetch(`${ORDENES_API}/credito/abono`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    const err = await res.json().catch(() => ({}));
+    if (err.error) throw new Error(err.error);
+  } catch (e) {
+    if (e.message && (e.message.includes('liquidada') || e.message.includes('mayor a cero'))) {
+      throw e;
+    }
     console.warn('Backend offline al registrar abono de credito:', e);
   }
   return {
     clienteId: String(clienteId || '1'),
     montoAbonado: Number(monto) || 0,
+    ordenLiquidada: ordenId,
     mensaje: 'Abono a credito propio aplicado exitosamente',
     fecha: new Date().toISOString()
   };
 };
 
+export const obtenerHistorialPagoOrden = async (ordenId) => {
+  if (!ordenId) return { online: true, intentos: [] };
+  try {
+    const res = await fetchWithTimeout(`${PAGOS_API}/pagos/orden/${encodeURIComponent(ordenId)}`, {}, 800);
+    if (res.ok) {
+      const data = await res.json();
+      return { online: true, intentos: Array.isArray(data) ? data : [] };
+    }
+    if (res.status === 404) {
+      return { online: true, intentos: [] };
+    }
+    return { online: false, intentos: [], error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { online: false, intentos: [], error: 'Servicio de pagos en sincronización diferida' };
+  }
+};
 
+export const getModoPayKlik = async () => {
+  try {
+    const res = await fetchWithTimeout(`${PAGOS_API}/payklik/modo`, {}, 800);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        deshabilitado: Boolean(data.deshabilitado || data.falloSimulado),
+        estadoPasarela: data.estadoPasarela || (data.deshabilitado ? 'DESHABILITADO' : 'OPERATIVA'),
+        estadoServicio: data.estadoServicio || (data.deshabilitado ? 'DESHABILITADO' : 'HABILITADO')
+      };
+    }
+  } catch (e) {
+    return { deshabilitado: true, estadoPasarela: 'CONTENEDOR_DETENIDO', estadoServicio: 'DESHABILITADO', offline: true };
+  }
+  return { deshabilitado: false, estadoPasarela: 'OPERATIVA', estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoPayKlik = async (deshabilitado) => {
+  const res = await fetch(`${PAGOS_API}/payklik/modo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deshabilitado, falloSimulado: deshabilitado })
+  });
+  if (!res.ok) throw new Error('No se pudo cambiar el estado de la pasarela PayKlik');
+  return await res.json();
+};
+
+export const getModoSat = async () => {
+  try {
+    const res = await fetchWithTimeout(`http://${API_HOST}:8084/api/sat/modo`, {}, 800);
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('sgologic_modo_sat', JSON.stringify(data));
+      return data;
+    }
+  } catch (e) {
+    // fallback local
+  }
+  try {
+    const cached = localStorage.getItem('sgologic_modo_sat');
+    if (cached) return JSON.parse(cached);
+  } catch (err) {}
+  return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoSat = async (deshabilitado) => {
+  let result = null;
+  try {
+    const res = await fetch(`http://${API_HOST}:8084/api/sat/modo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deshabilitado, falloSimulado: deshabilitado })
+    });
+    if (res.ok) {
+      result = await res.json();
+    }
+  } catch (err) {
+    // fallback local
+  }
+  if (!result) {
+    result = { deshabilitado, estadoServicio: deshabilitado ? 'DESHABILITADO' : 'HABILITADO' };
+  }
+  try {
+    localStorage.setItem('sgologic_modo_sat', JSON.stringify(result));
+  } catch (err) {}
+  return result;
+};
+
+export const getModoInventario = async () => {
+  try {
+    const res = await fetchWithTimeout(`${INVENTARIO_API}/modo`, {}, 800);
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('sgologic_modo_inventario', JSON.stringify(data));
+      return data;
+    }
+  } catch (e) {
+    // fallback local
+  }
+  try {
+    const cached = localStorage.getItem('sgologic_modo_inventario');
+    if (cached) return JSON.parse(cached);
+  } catch (err) {}
+  return { deshabilitado: false, estadoServicio: 'HABILITADO' };
+};
+
+export const toggleModoInventario = async (deshabilitado) => {
+  let result = null;
+  try {
+    const res = await fetch(`${INVENTARIO_API}/modo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deshabilitado })
+    });
+    if (res.ok) {
+      result = await res.json();
+    }
+  } catch (err) {}
+  if (!result) {
+    result = { deshabilitado, estadoServicio: deshabilitado ? 'DESHABILITADO' : 'HABILITADO' };
+  }
+  try {
+    localStorage.setItem('sgologic_modo_inventario', JSON.stringify(result));
+  } catch (err) {}
+  return result;
+};
+
+export const getPagosContingencia = async () => {
+  try {
+    const res = await fetchWithTimeout(`${PAGOS_API}/pagos/contingencia`, {}, 800);
+    if (res.ok) return await res.json();
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
+export const reprocesarPagosContingencia = async () => {
+  const res = await fetch(`${PAGOS_API}/pagos/reprocesar-dlq`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) throw new Error('Error al reprocesar cola de contingencia DLQ');
+  return await res.json();
+};
+
+export const ajustarStockInventario = async (productoId, ubicacion, cantidad) => {
+  const res = await fetch(`${INVENTARIO_API}/stock/ajuste`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productoId, ubicacion, cantidad })
+  });
+  if (!res.ok) throw new Error('Error al ajustar stock en inventario');
+  return await res.json();
+};
+
+export const sincronizarCarritoTemporal = async (clienteId, items) => {
+  if (!clienteId) return;
+  try {
+    await fetchWithTimeout(`${ORDENES_API}/carrito/${encodeURIComponent(clienteId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, actualizado: new Date().toISOString() })
+    }, 600);
+  } catch (e) {
+    // Silencioso si Redis/backend no responde
+  }
+};
+
+export const limpiarCarritoTemporal = async (clienteId) => {
+  if (!clienteId) return;
+  try {
+    await fetchWithTimeout(`${ORDENES_API}/carrito/${encodeURIComponent(clienteId)}`, {
+      method: 'DELETE'
+    }, 600);
+  } catch (e) {
+    // Silencioso
+  }
+};

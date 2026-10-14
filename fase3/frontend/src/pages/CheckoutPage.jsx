@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { Truck, Store, CreditCard, Building2, Wallet, ArrowLeft, Lock, CheckCircle2, Shield, AlertTriangle, X, CalendarClock, Sparkles, Trash2 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { crearOrden, evaluarCredito } from '../services/api';
+import { crearOrden, evaluarCredito, consultarDisponibilidadProducto, getModoPayKlik } from '../services/api';
 import {
   validarElegibilidadCredito,
   calcularVencimientoCredito,
@@ -15,22 +15,69 @@ import {
 } from '../utils/checkoutUtils';
 
 export const CheckoutPage = () => {
-  const { cartItems, subtotal, clearCart } = useCart();
+  const { cartItems, subtotal, clearCart, updateQuantity, removeFromCart } = useCart();
   const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
 
-  React.useEffect(() => {
-    if (!user) {
-      navigate('/login?redirect=/checkout');
-    }
-  }, [user, navigate]);
+  if (!user) {
+    return <Navigate to="/login?redirect=/checkout" replace />;
+  }
 
   const [deliveryType, setDeliveryType] = useState('domicilio');
+  const [selectedSucursal, setSelectedSucursal] = useState('MegaStore Miraflores Zona 11 (C.C. Miraflores Local 104)');
   const [paymentMethod, setPaymentMethod] = useState('payklik');
   const [loading, setLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
+  const [stockBlock, setStockBlock] = useState(false);
+  const [stockIssue, setStockIssue] = useState(null);
   const [creditoInfo, setCreditoInfo] = useState(null);
   const [loadingCredito, setLoadingCredito] = useState(true);
+  const [payklikModo, setPayklikModo] = useState({ deshabilitado: false });
+
+  useEffect(() => {
+    let isMounted = true;
+    getModoPayKlik().then(m => {
+      if (isMounted && m) setPayklikModo(m);
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  // Verificación y sondeo en vivo de inventario (cada 4 seg) para detectar compras concurrentes
+  useEffect(() => {
+    let isMounted = true;
+    const verifyStock = async () => {
+      if (cartItems.length === 0) return;
+      for (const item of cartItems) {
+        const disp = await consultarDisponibilidadProducto(item.id);
+        if (disp !== null && disp.totalDisponible < item.cantidad) {
+          if (isMounted) {
+            setStockBlock(true);
+            setStockIssue({
+              productoId: item.id,
+              nombre: item.nombre,
+              disponible: disp.totalDisponible,
+              solicitado: item.cantidad
+            });
+            setCheckoutError(
+              `Inventario insuficiente para "${item.nombre}". Stock disponible en bodega: ${disp.totalDisponible} uds, solicitado: ${item.cantidad} uds. Por favor ajusta la cantidad.`
+            );
+          }
+          return;
+        }
+      }
+      if (isMounted) {
+        setStockBlock(false);
+        setStockIssue(null);
+      }
+    };
+
+    verifyStock();
+    const interval = setInterval(verifyStock, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [cartItems]);
 
   // Form Fields
   const [fullName, setFullName] = useState(user?.nombre || '');
@@ -67,9 +114,18 @@ export const CheckoutPage = () => {
         try {
           const evalRes = await evaluarCredito(user.id || '1', total);
           if (isMounted && evalRes) {
-            setCreditoInfo(evalRes);
-            if (evalRes.aprobado) {
+            const elegibleLocal = validarElegibilidadCredito(
+              { creditScore: evalRes.score ?? user.creditScore ?? 80 },
+              total,
+              evalRes.saldoDisponible ?? 3500
+            );
+            const aprobadoFinal = Boolean(evalRes.aprobado && elegibleLocal);
+            const infoNormalizada = { ...evalRes, aprobado: aprobadoFinal };
+            setCreditoInfo(infoNormalizada);
+            if (aprobadoFinal) {
               setPaymentMethod('credito_propio'); // Seleccionar Crédito Propio como opción recomendada si califica
+            } else {
+              setPaymentMethod(prev => (prev === 'credito_propio' ? 'payklik' : prev));
             }
           }
         } catch (e) {
@@ -83,7 +139,14 @@ export const CheckoutPage = () => {
     return () => { isMounted = false; };
   }, [user, total]);
 
-  // Cálculo de vencimiento y detalle comercial BNPL (checkoutUtils)
+  // Cálculo de vencimiento, métodos disponibles y detalle comercial BNPL (checkoutUtils)
+  const metodosDisponibles = React.useMemo(() => {
+    return filtrarMetodosPagoDisponibles(
+      ['payklik', 'transferencia', 'billetera'],
+      Boolean(creditoInfo?.aprobado)
+    );
+  }, [creditoInfo]);
+
   const fechaVencimientoCalculada = React.useMemo(() => {
     try {
       return calcularVencimientoCredito(new Date(), 30);
@@ -144,6 +207,12 @@ export const CheckoutPage = () => {
       navigate(`/confirmacion/${order.id}`);
     } catch (err) {
       console.error('Checkout error:', err);
+      if (err.stockIssue) {
+        setStockIssue(err.stockIssue);
+        setStockBlock(true);
+      } else if (err.message && (err.message.toLowerCase().includes('inventario') || err.message.toLowerCase().includes('stock'))) {
+        setStockBlock(true);
+      }
       setCheckoutError(err.message || 'Hubo un problema al procesar tu compra. Por favor intenta de nuevo.');
     } finally {
       setLoading(false);
@@ -182,13 +251,63 @@ export const CheckoutPage = () => {
             <h1 className="checkout-title">Finalizar Compra</h1>
 
             {checkoutError && (
-              <div className="glass-panel" style={{ borderLeft: '4px solid var(--orange-primary)', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', backgroundColor: 'rgba(255, 140, 0, 0.05)' }}>
-                <AlertTriangle size={24} style={{ color: 'var(--orange-primary)', flexShrink: 0 }} />
+              <div className="glass-panel" style={{ borderLeft: '4px solid #ef4444', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1rem', backgroundColor: 'rgba(239, 68, 68, 0.08)' }}>
+                <AlertTriangle size={24} style={{ color: '#ef4444', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <h4 style={{ margin: '0 0 0.4rem 0', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600 }}>Alerta de Inventario</h4>
+                  <h4 style={{ margin: '0 0 0.4rem 0', color: '#f87171', fontSize: '1rem', fontWeight: 600 }}>
+                    {checkoutError.toLowerCase().includes('inventario') || checkoutError.toLowerCase().includes('stock')
+                      ? 'Alerta de Inventario Insuficiente'
+                      : 'Aviso del Sistema'}
+                  </h4>
                   <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>{checkoutError}</p>
+
+                  {/* Acciones contextuales para inventario */}
+                  {stockIssue ? (
+                    <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {stockIssue.disponible > 0 ? (
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => {
+                            updateQuantity(stockIssue.productoId, stockIssue.disponible);
+                            setStockBlock(false);
+                            setStockIssue(null);
+                            setCheckoutError(null);
+                          }}
+                          style={{ fontSize: '0.82rem', padding: '0.4rem 0.8rem' }}
+                        >
+                          Ajustar mi pedido a {stockIssue.disponible} uds disponibles
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={() => {
+                            removeFromCart(stockIssue.productoId);
+                            setStockBlock(false);
+                            setStockIssue(null);
+                            setCheckoutError(null);
+                          }}
+                          style={{ fontSize: '0.82rem', padding: '0.4rem 0.8rem', color: '#ef4444', borderColor: '#ef4444' }}
+                        >
+                          Quitar "{stockIssue.nombre}" del pedido
+                        </button>
+                      )}
+                      <Link to="/carrito" className="btn-secondary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--orange-primary)' }}>
+                        <ArrowLeft size={14} />
+                        <span>Volver al carrito</span>
+                      </Link>
+                    </div>
+                  ) : (checkoutError.toLowerCase().includes('inventario') || checkoutError.toLowerCase().includes('stock')) ? (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <Link to="/carrito" className="btn-secondary btn-sm" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--orange-primary)' }}>
+                        <ArrowLeft size={14} />
+                        <span>Volver al carrito a ajustar cantidades</span>
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
-                <button onClick={() => setCheckoutError(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} title="Cerrar alerta">
+                <button onClick={() => { setCheckoutError(null); setStockIssue(null); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} title="Cerrar alerta">
                   <X size={20} />
                 </button>
               </div>
@@ -221,7 +340,10 @@ export const CheckoutPage = () => {
                     name="delivery"
                     value="tienda"
                     checked={deliveryType === 'tienda'}
-                    onChange={() => setDeliveryType('tienda')}
+                    onChange={() => {
+                      setDeliveryType('tienda');
+                      setAddress(`Retiro en: ${selectedSucursal}`);
+                    }}
                   />
                   <Store size={28} className="option-icon" />
                   <span className="option-label">Recoger en Tienda</span>
@@ -272,6 +394,56 @@ export const CheckoutPage = () => {
                   </div>
                 </div>
               )}
+
+              {/* Pickup in Store Form (if Tienda) */}
+              {deliveryType === 'tienda' && (
+                <div className="shipping-address-form">
+                  <h3>Punto de Retiro en Tienda</h3>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label className="form-label">Nombre de quien recoge</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Ej. Juan Pérez"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Teléfono de contacto</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Ej. +502 5555 1234"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group full-width">
+                      <label className="form-label">Sucursal de Retiro</label>
+                      <select
+                        className="form-input"
+                        value={selectedSucursal}
+                        onChange={(e) => {
+                          setSelectedSucursal(e.target.value);
+                          setAddress(`Retiro en: ${e.target.value}`);
+                        }}
+                      >
+                        <option value="MegaStore Miraflores Zona 11 (C.C. Miraflores Local 104)">MegaStore Miraflores Zona 11 (C.C. Miraflores Local 104)</option>
+                        <option value="MegaStore Oakland Mall Zona 10 (Plaza Central Nivel 2)">MegaStore Oakland Mall Zona 10 (Plaza Central Nivel 2)</option>
+                        <option value="MegaStore Pradera Concepción (Km 15.5 Carr. a El Salvador)">MegaStore Pradera Concepción (Km 15.5 Carr. a El Salvador)</option>
+                        <option value="MegaStore Portales Zona 17 (Km 4.5 Carr. al Atlántico)">MegaStore Portales Zona 17 (Km 4.5 Carr. al Atlántico)</option>
+                        <option value="MegaStore Paseo Cayalá Zona 16 (Paseo de los Arquitectos)">MegaStore Paseo Cayalá Zona 16 (Paseo de los Arquitectos)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* Payment Methods */}
@@ -283,7 +455,7 @@ export const CheckoutPage = () => {
 
               <div className="payment-methods-list">
                 {/* 1. OPCIÓN DESTACADA: Crédito Propio 'Compra ahora, paga en 30 días' (Fase 3 BNPL) */}
-                {creditoInfo?.aprobado && (
+                {metodosDisponibles.includes('credito_propio') && creditoInfo?.aprobado && (
                   <div
                     className={`payment-method-card ${paymentMethod === 'credito_propio' ? 'selected' : ''}`}
                     style={{
@@ -309,7 +481,7 @@ export const CheckoutPage = () => {
                             </span>
                           </div>
                           <div className="method-desc" style={{ color: 'var(--text-secondary)' }}>
-                            0% interés promocional • Fecha límite de pago: <strong style={{ color: 'var(--orange-hover)' }}>{creditoInfo.fechaVencimiento || 'en 30 días'}</strong>
+                            0% interés promocional • Fecha límite de pago: <strong style={{ color: 'var(--orange-hover)' }}>{creditoInfo.fechaVencimiento || fechaVencimientoCalculada || 'en 30 días'}</strong>
                           </div>
                         </div>
                       </div>
@@ -329,7 +501,12 @@ export const CheckoutPage = () => {
                             Score Crediticio: {creditoInfo.score}/100 (Aprobado)
                           </span>
                         </div>
-                        <p style={{ margin: '0.65rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                        {detalleBNPL && (
+                          <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--orange-hover)', fontWeight: 600 }}>
+                            Condición comercial: {detalleBNPL.descripcion} (Tasa {detalleBNPL.tasaInteres}% / Apertura Q{detalleBNPL.recargoApertura.toFixed(2)})
+                          </div>
+                        )}
+                        <p style={{ margin: '0.45rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
                           Al confirmar, tu orden será procesada y despachada de inmediato. Recibirás un recordatorio en tu correo antes del vencimiento.
                         </p>
                       </div>
@@ -360,8 +537,19 @@ export const CheckoutPage = () => {
                       />
                       <CreditCard size={24} className="method-icon" />
                       <div>
-                        <div className="method-name">PayKlik Pasarela Unificada</div>
-                        <div className="method-desc">Tarjeta de Crédito o Débito (Visa, Mastercard, Amex)</div>
+                        <div className="method-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span>PayKlik Pasarela Unificada</span>
+                          {payklikModo.deshabilitado && (
+                            <span className="badge badge-warning" style={{ fontSize: '0.72rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)', fontWeight: 600 }}>
+                              Contingencia DLQ Activa
+                            </span>
+                          )}
+                        </div>
+                        <div className="method-desc">
+                          {payklikModo.deshabilitado
+                            ? 'Pasarela en contingencia: los pagos con tarjeta se encolarán de forma segura en la cola DLQ de RabbitMQ protegiendo tu reserva.'
+                            : 'Tarjeta de Crédito o Débito (Visa, Mastercard, Amex)'}
+                        </div>
                       </div>
                     </div>
                     {paymentMethod === 'payklik' && <CheckCircle2 size={20} className="check-active" />}
@@ -567,18 +755,27 @@ export const CheckoutPage = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleConfirmPurchase}
-                className="btn-primary btn-block btn-confirm-pay"
-                disabled={loading || cartItems.length === 0}
-              >
-                <Lock size={18} />
-                <span>
-                  {loading
-                    ? (paymentMethod === 'credito_propio' ? 'Procesando crédito...' : 'Procesando con PayKlik...')
-                    : (paymentMethod === 'credito_propio' ? 'Confirmar Compra con Crédito Propio (Paga en 30 días)' : 'Confirmar y pagar')}
-                </span>
-              </button>
+              {(() => {
+                const hayErrorInventario = stockBlock || (checkoutError && (checkoutError.toLowerCase().includes('inventario') || checkoutError.toLowerCase().includes('stock')));
+                return (
+                  <button
+                    onClick={handleConfirmPurchase}
+                    className="btn-primary btn-block btn-confirm-pay"
+                    disabled={loading || cartItems.length === 0 || hayErrorInventario}
+                    style={hayErrorInventario ? { opacity: 0.5, cursor: 'not-allowed', background: '#475569', borderColor: '#64748b' } : {}}
+                    title={hayErrorInventario ? 'No se puede procesar: inventario insuficiente en bodega.' : ''}
+                  >
+                    <Lock size={18} />
+                    <span>
+                      {loading
+                        ? (paymentMethod === 'credito_propio' ? 'Procesando crédito...' : 'Procesando con PayKlik...')
+                        : (hayErrorInventario
+                          ? 'Inventario insuficiente (reduce cantidad)'
+                          : (paymentMethod === 'credito_propio' ? 'Confirmar Compra con Crédito Propio (Paga en 30 días)' : 'Confirmar y pagar'))}
+                    </span>
+                  </button>
+                );
+              })()}
 
               <p className="checkout-terms-note">
                 Al hacer clic en "Confirmar y pagar", autorizas el procesamiento de la orden y aceptas nuestros Términos y Condiciones.
