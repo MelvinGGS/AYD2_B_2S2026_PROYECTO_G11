@@ -27,9 +27,6 @@ export const GlobalHelpWidget = () => {
   const esVistaAdmin = location.pathname.startsWith('/admin') ||
                        location.pathname.startsWith('/dashboard') ||
                        location.pathname.includes('/dashboard');
-  if (esVistaAdmin) {
-    return null;
-  }
 
   // Escuchar evento global 'open-help-modal' para apertura programática desde cualquier componente
   useEffect(() => {
@@ -124,6 +121,10 @@ export const GlobalHelpWidget = () => {
       setSubmitting(false);
     }
   };
+
+  if (esVistaAdmin) {
+    return null;
+  }
 
   return (
     <>

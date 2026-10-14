@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { Mail, Lock, LogIn, Store, ShieldCheck, UserCheck, Headphones, UserPlus, CheckCircle2, Phone, MapPin } from 'lucide-react';
+import { Mail, Lock, LogIn, Store, ShieldCheck, UserCheck, Headphones, UserPlus, CheckCircle2, Phone, MapPin, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
@@ -95,6 +95,31 @@ export const LoginPage = () => {
   return (
     <div className="login-page">
       <div className="login-card glass-panel animate-fade-in">
+        {/* Navigation back to shop */}
+        <div className="login-back-container" style={{ marginBottom: '1.25rem' }}>
+          <Link
+            to="/"
+            className="btn-back-link"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              color: 'var(--text-secondary)',
+              textDecoration: 'none',
+              fontSize: '0.88rem',
+              fontWeight: 600,
+              padding: '0.45rem 0.85rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--border-subtle)',
+              transition: 'var(--transition)'
+            }}
+          >
+            <ArrowLeft size={16} />
+            <span>Volver a la tienda</span>
+          </Link>
+        </div>
+
         {/* Header */}
         <div className="login-header">
           <div className="login-brand">

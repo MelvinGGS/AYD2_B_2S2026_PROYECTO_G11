@@ -5,33 +5,45 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('sgologic_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('sgologic_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
   });
 
   const login = async (email, password) => {
     const userObj = await loginUser(email, password);
+    try {
+      localStorage.setItem('sgologic_user', JSON.stringify(userObj));
+    } catch (e) {}
     setUser(userObj);
-    localStorage.setItem('sgologic_user', JSON.stringify(userObj));
     return userObj;
   };
 
   const register = async (userData) => {
     const userObj = await registerUser(userData);
+    try {
+      localStorage.setItem('sgologic_user', JSON.stringify(userObj));
+    } catch (e) {}
     setUser(userObj);
-    localStorage.setItem('sgologic_user', JSON.stringify(userObj));
     return userObj;
   };
 
   const logout = () => {
+    try {
+      localStorage.removeItem('sgologic_user');
+    } catch (e) {}
     setUser(null);
-    localStorage.removeItem('sgologic_user');
   };
 
   const updateProfile = (updatedFields) => {
     setUser(prev => {
       const merged = { ...prev, ...updatedFields };
-      localStorage.setItem('sgologic_user', JSON.stringify(merged));
+      try {
+        localStorage.setItem('sgologic_user', JSON.stringify(merged));
+      } catch (e) {}
       return merged;
     });
   };
