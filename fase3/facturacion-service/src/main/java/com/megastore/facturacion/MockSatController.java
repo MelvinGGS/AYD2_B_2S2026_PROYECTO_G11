@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping({"/api/sat", "/mock/sat"})
+@RequestMapping({"/api/sat", "/mock/sat", "/api/facturas/sat"})
 @CrossOrigin(origins = "*")
 public class MockSatController {
 

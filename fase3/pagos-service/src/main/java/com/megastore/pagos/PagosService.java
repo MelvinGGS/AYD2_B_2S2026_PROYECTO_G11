@@ -136,12 +136,14 @@ public class PagosService {
     }
 
     public Map<String, Object> reprocesarPagosEnContingencia() {
-        java.util.List<IntentoPago> todos = intentoPagoRepository.findAll();
+        java.util.List<IntentoPago> todos = intentoPagoRepository.findOrdenesRealesEnContingencia();
+        if (todos.isEmpty()) {
+            todos = intentoPagoRepository.findTop100ByResultadoIgnoreCaseOrderByIdDesc("ENCOLADO_CONTINGENCIA");
+        }
         int reprocesados = 0;
         java.util.List<String> ordenesRecuperadas = new java.util.ArrayList<>();
 
         for (IntentoPago intento : todos) {
-            if ("ENCOLADO_CONTINGENCIA".equalsIgnoreCase(intento.getResultado())) {
                 String refRecuperada = "PK-REC-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
                 intento.setResultado("APROBADO");
                 intento.setReferenciaPayklik(refRecuperada);
@@ -158,9 +160,8 @@ public class PagosService {
                         refRecuperada,
                         "Ciudad de Guatemala"
                 );
-                reprocesados++;
-                ordenesRecuperadas.add(intento.getOrdenId());
-            }
+            reprocesados++;
+            ordenesRecuperadas.add(intento.getOrdenId());
         }
 
         Map<String, Object> resumen = new HashMap<>();
@@ -169,6 +170,7 @@ public class PagosService {
         resumen.put("fecha", LocalDateTime.now().toString());
         return resumen;
     }
+
 
     // -------------------------------------------------------------------------
     // RUTA 2: CREDITO_PROPIO_30D — Sin pasarela externa, sin Circuit Breaker

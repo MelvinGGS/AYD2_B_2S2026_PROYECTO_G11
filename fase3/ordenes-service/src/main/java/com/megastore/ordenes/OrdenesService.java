@@ -256,4 +256,14 @@ public class OrdenesService {
     public List<EventoAuditoria> listarIncidencias() {
         return auditoriaRepository.findByTipoEventoStartingWithOrderByFechaDesc("INCIDENCIA");
     }
+
+    public Optional<EventoAuditoria> responderIncidencia(Long incidenciaId, String respuesta) {
+        return auditoriaRepository.findById(incidenciaId).map(inc -> {
+            inc.setRespuesta(respuesta != null ? respuesta.trim() : "");
+            inc.setEstado("ATENDIDA");
+            EventoAuditoria guardada = auditoriaRepository.save(inc);
+            System.out.println("[AUDITORIA ATENCION] Incidencia " + incidenciaId + " respondida: " + respuesta);
+            return guardada;
+        });
+    }
 }

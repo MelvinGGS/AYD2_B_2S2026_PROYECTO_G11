@@ -35,9 +35,10 @@ public class PagosController {
 
     @GetMapping("/contingencia")
     public ResponseEntity<List<IntentoPago>> listarPagosEnContingencia() {
-        List<IntentoPago> encolados = intentoPagoRepository.findAll().stream()
-                .filter(p -> "ENCOLADO_CONTINGENCIA".equalsIgnoreCase(p.getResultado()))
-                .toList();
+        List<IntentoPago> encolados = intentoPagoRepository.findOrdenesRealesEnContingencia();
+        if (encolados.isEmpty()) {
+            encolados = intentoPagoRepository.findTop100ByResultadoIgnoreCaseOrderByIdDesc("ENCOLADO_CONTINGENCIA");
+        }
         return ResponseEntity.ok(encolados);
     }
 

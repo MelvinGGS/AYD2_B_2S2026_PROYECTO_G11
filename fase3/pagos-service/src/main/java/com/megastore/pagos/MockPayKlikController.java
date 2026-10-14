@@ -17,6 +17,10 @@ public class MockPayKlikController {
 
     private static volatile boolean falloSimulado = false;
 
+    public static boolean isFalloSimulado() {
+        return falloSimulado;
+    }
+
     @GetMapping("/modo")
     public ResponseEntity<Map<String, Object>> consultarModo() {
         return ResponseEntity.ok(Map.of(

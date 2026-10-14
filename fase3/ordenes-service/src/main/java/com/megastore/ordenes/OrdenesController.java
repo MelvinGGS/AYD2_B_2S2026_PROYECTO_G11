@@ -76,4 +76,12 @@ public class OrdenesController {
     public ResponseEntity<List<EventoAuditoria>> listarIncidencias() {
         return ResponseEntity.ok(ordenesService.listarIncidencias());
     }
+
+    @PostMapping("/incidencias/{id}/responder")
+    public ResponseEntity<?> responderIncidencia(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        String respuesta = body.getOrDefault("respuesta", "");
+        return ordenesService.responderIncidencia(id, respuesta)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
 }

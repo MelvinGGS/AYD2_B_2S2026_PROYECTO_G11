@@ -14,10 +14,12 @@ public class InventarioController {
 
     private final ProductoRepository productoRepository;
     private final StockRepository stockRepository;
+    private final ReservaRepository reservaRepository;
 
-    public InventarioController(ProductoRepository productoRepository, StockRepository stockRepository) {
+    public InventarioController(ProductoRepository productoRepository, StockRepository stockRepository, ReservaRepository reservaRepository) {
         this.productoRepository = productoRepository;
         this.stockRepository = stockRepository;
+        this.reservaRepository = reservaRepository;
     }
 
     // Tarea 3: Endpoint GET /api/inventario/productos con filtros en el backend
@@ -158,6 +160,11 @@ public class InventarioController {
         }).collect(Collectors.toList());
 
         return ResponseEntity.ok(unificado);
+    }
+
+    @GetMapping("/reservas")
+    public ResponseEntity<List<Reserva>> getReservas() {
+        return ResponseEntity.ok(reservaRepository.findAll());
     }
 
     @PostMapping("/stock/ajuste")
