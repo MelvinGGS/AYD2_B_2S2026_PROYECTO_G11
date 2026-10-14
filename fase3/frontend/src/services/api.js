@@ -5,29 +5,40 @@ const API_HOST = (typeof window !== 'undefined' && window.location && window.loc
   ? window.location.hostname
   : 'localhost';
 
+const isSecureOrProd = (typeof window !== 'undefined' && window.location && 
+  (window.location.protocol === 'https:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')));
+
+const API_ORIGIN = (typeof window !== 'undefined' && window.location && window.location.origin)
+  ? window.location.origin
+  : 'http://localhost:3000';
+
 export const ORDENES_API = (typeof process !== 'undefined' && process.env?.REACT_APP_ORDENES_API)
   ? process.env.REACT_APP_ORDENES_API
-  : (import.meta.env?.VITE_ORDENES_API || `http://${API_HOST}:8081/api`);
+  : (import.meta.env?.VITE_ORDENES_API || (isSecureOrProd ? `${API_ORIGIN}/api` : `http://${API_HOST}:8081/api`));
 
 export const INVENTARIO_API = (typeof process !== 'undefined' && process.env?.REACT_APP_INVENTARIO_API)
   ? process.env.REACT_APP_INVENTARIO_API
-  : (import.meta.env?.VITE_INVENTARIO_API || `http://${API_HOST}:8082/api/inventario`);
+  : (import.meta.env?.VITE_INVENTARIO_API || (isSecureOrProd ? `${API_ORIGIN}/api/inventario` : `http://${API_HOST}:8082/api/inventario`));
 
 export const FACTURACION_API = (typeof process !== 'undefined' && process.env?.REACT_APP_FACTURACION_API)
   ? process.env.REACT_APP_FACTURACION_API
-  : (import.meta.env?.VITE_FACTURACION_API || `http://${API_HOST}:8084/api/facturas`);
+  : (import.meta.env?.VITE_FACTURACION_API || (isSecureOrProd ? `${API_ORIGIN}/api/facturas` : `http://${API_HOST}:8084/api/facturas`));
+
+export const SAT_API = isSecureOrProd
+  ? `${API_ORIGIN}/api/sat`
+  : (import.meta.env?.VITE_SAT_API || `http://${API_HOST}:8084/api/sat`);
 
 export const PAGOS_API = (typeof process !== 'undefined' && process.env?.REACT_APP_PAGOS_API)
   ? process.env.REACT_APP_PAGOS_API
-  : (import.meta.env?.VITE_PAGOS_API || `http://${API_HOST}:8083/api`);
+  : (import.meta.env?.VITE_PAGOS_API || (isSecureOrProd ? `${API_ORIGIN}/api` : `http://${API_HOST}:8083/api`));
 
 export const LOGISTICA_API = (typeof process !== 'undefined' && process.env?.REACT_APP_LOGISTICA_API)
   ? process.env.REACT_APP_LOGISTICA_API
-  : (import.meta.env?.VITE_LOGISTICA_API || `http://${API_HOST}:8085/api/logistica`);
+  : (import.meta.env?.VITE_LOGISTICA_API || (isSecureOrProd ? `${API_ORIGIN}/api/logistica` : `http://${API_HOST}:8085/api/logistica`));
 
 export const NOTIFICACIONES_API = (typeof process !== 'undefined' && process.env?.REACT_APP_NOTIFICACIONES_API)
   ? process.env.REACT_APP_NOTIFICACIONES_API
-  : (import.meta.env?.VITE_NOTIFICACIONES_API || `http://${API_HOST}:8086/api/notificaciones`);
+  : (import.meta.env?.VITE_NOTIFICACIONES_API || (isSecureOrProd ? `${API_ORIGIN}/api/notificaciones` : `http://${API_HOST}:8086/api/notificaciones`));
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 800) => {
   const controller = new AbortController();
@@ -661,7 +672,7 @@ export const getDashboardMetrics = async () => {
         }
         return null;
       }),
-      pingServiceHealth('SAT Facturación XML', `http://${API_HOST}:8084/api/sat/modo`, (data, latencia) => {
+      pingServiceHealth('SAT Facturación XML', `${SAT_API}/modo`, (data, latencia) => {
         let isDeshab = data && data.deshabilitado;
         try {
           const cached = localStorage.getItem('sgologic_modo_sat');
@@ -672,7 +683,7 @@ export const getDashboardMetrics = async () => {
         }
         return null;
       }),
-      pingServiceHealth('LogiExpress Courier', `http://${API_HOST}:8085/`, (_data, latencia) => {
+      pingServiceHealth('LogiExpress Courier', isSecureOrProd ? `${API_ORIGIN}/api/logistica/health` : `http://${API_HOST}:8085/`, (_data, latencia) => {
         if (modoLogLocal.deshabilitado) {
           return { nombre: 'LogiExpress Courier', estado: 'Deshabilitado (Despacho en Espera)', statusType: 'error', latencia };
         }
@@ -941,7 +952,7 @@ export const toggleModoPayKlik = async (deshabilitado) => {
 
 export const getModoSat = async () => {
   try {
-    const res = await fetchWithTimeout(`http://${API_HOST}:8084/api/sat/modo`, {}, 800);
+    const res = await fetchWithTimeout(`${SAT_API}/modo`, {}, 800);
     if (res.ok) {
       const data = await res.json();
       localStorage.setItem('sgologic_modo_sat', JSON.stringify(data));
@@ -960,7 +971,7 @@ export const getModoSat = async () => {
 export const toggleModoSat = async (deshabilitado) => {
   let result = null;
   try {
-    const res = await fetch(`http://${API_HOST}:8084/api/sat/modo`, {
+    const res = await fetch(`${SAT_API}/modo`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deshabilitado, falloSimulado: deshabilitado })
