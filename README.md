@@ -70,3 +70,5 @@ curl -s -X POST http://megastore-gt.duckdns.org:8081/api/credito/evaluar \
   -H "Content-Type: application/json" \
   -d '{"clienteId": "cliente@megastore.com", "monto": 250.0}'
 ```
+
+<!-- verified-ci-sync -->
